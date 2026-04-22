@@ -1,0 +1,186 @@
+"""
+Dummy data mode untuk Sales Radar 2.0.
+Simulates Apollo API response dengan data perusahaan Indonesia yang realistis.
+"""
+
+from models.schemas import Company, Contact
+from typing import List, Optional
+
+DUMMY_COMPANIES: List[dict] = [
+    {
+        "id": "dummy-001",
+        "name": "Bank Central Asia (BCA)",
+        "industry": "Banking",
+        "employee_count": 25000,
+        "description": "Bank swasta terbesar di Indonesia dengan jaringan lebih dari 1.200 kantor cabang. Fokus pada pengembangan digital banking dan talent development untuk ribuan karyawan frontliner.",
+        "website": "https://www.bca.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/bca",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-002",
+        "name": "Telkom Indonesia",
+        "industry": "Telecommunications",
+        "employee_count": 14000,
+        "description": "BUMN telekomunikasi terbesar di Indonesia. Memiliki program transformasi digital besar-besaran yang membutuhkan upskilling masif untuk karyawan di seluruh Indonesia.",
+        "website": "https://www.telkom.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/telkom-indonesia",
+        "location": "Bandung, Indonesia",
+    },
+    {
+        "id": "dummy-003",
+        "name": "Astra International",
+        "industry": "Retail & Automotive",
+        "employee_count": 230000,
+        "description": "Konglomerat terbesar Indonesia dengan 200+ perusahaan anak. Memiliki Astra Learning Center dan kebutuhan pelatihan untuk ratusan ribu karyawan di berbagai sektor.",
+        "website": "https://www.astra.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/astra-international",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-004",
+        "name": "Bank Mandiri",
+        "industry": "Banking",
+        "employee_count": 38000,
+        "description": "Bank BUMN terbesar di Indonesia. Memiliki Mandiri University dan aktif mengembangkan program e-learning untuk karyawan dalam rangka transformasi digital perbankan.",
+        "website": "https://www.bankmandiri.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/bank-mandiri",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-005",
+        "name": "Tokopedia",
+        "industry": "E-commerce & Technology",
+        "employee_count": 4500,
+        "description": "Platform e-commerce terbesar Indonesia. Pertumbuhan pesat membutuhkan onboarding dan upskilling ribuan karyawan baru setiap tahun, terutama untuk tim product dan operations.",
+        "website": "https://www.tokopedia.com",
+        "linkedin_url": "https://www.linkedin.com/company/tokopedia",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-006",
+        "name": "Prudential Indonesia",
+        "industry": "Insurance",
+        "employee_count": 3200,
+        "description": "Perusahaan asuransi jiwa terkemuka di Indonesia dengan 150.000+ agen. Membutuhkan platform learning untuk compliance training, product knowledge, dan pengembangan agen.",
+        "website": "https://www.prudential.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/prudential-indonesia",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-007",
+        "name": "Matahari Department Store",
+        "industry": "Retail",
+        "employee_count": 45000,
+        "description": "Jaringan department store terbesar di Indonesia dengan 150+ gerai. Kebutuhan training frontliner sangat tinggi — customer service, product knowledge, dan SOP gerai.",
+        "website": "https://www.matahari.com",
+        "linkedin_url": "https://www.linkedin.com/company/matahari-department-store",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-008",
+        "name": "Gojek",
+        "industry": "Technology & Super App",
+        "employee_count": 6000,
+        "description": "Super app terbesar Asia Tenggara yang berkantor pusat di Jakarta. Fokus pada people development dan learning culture untuk mendukung ekspansi regional.",
+        "website": "https://www.gojek.com",
+        "linkedin_url": "https://www.linkedin.com/company/gojek",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-009",
+        "name": "Pertamina",
+        "industry": "Energy & Oil",
+        "employee_count": 31000,
+        "description": "Perusahaan energi BUMN terbesar Indonesia. Memiliki Pertamina Corporate University dan program pengembangan SDM yang masif untuk mendukung transformasi menuju energi terbarukan.",
+        "website": "https://www.pertamina.com",
+        "linkedin_url": "https://www.linkedin.com/company/pertamina",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-010",
+        "name": "Indofood",
+        "industry": "Food & Beverage",
+        "employee_count": 92000,
+        "description": "Produsen makanan terbesar Indonesia dengan operasi di seluruh nusantara. Kebutuhan training untuk tenaga pabrik, distribusi, dan sales sangat besar.",
+        "website": "https://www.indofood.com",
+        "linkedin_url": "https://www.linkedin.com/company/indofood",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-011",
+        "name": "Bank Rakyat Indonesia (BRI)",
+        "industry": "Banking",
+        "employee_count": 73000,
+        "description": "Bank dengan jaringan terluas di Indonesia, melayani UMKM dan pedesaan. Membutuhkan learning platform yang bisa menjangkau karyawan di ribuan titik layanan termasuk daerah terpencil.",
+        "website": "https://www.bri.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/bank-rakyat-indonesia",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-012",
+        "name": "Shopee Indonesia",
+        "industry": "E-commerce & Technology",
+        "employee_count": 5000,
+        "description": "Platform e-commerce dengan pertumbuhan tercepat di Asia Tenggara. Kebutuhan onboarding skala besar dan continuous learning untuk tim yang terus berkembang.",
+        "website": "https://shopee.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/shopee",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-013",
+        "name": "Garuda Indonesia",
+        "industry": "Aviation & Hospitality",
+        "employee_count": 7500,
+        "description": "Maskapai penerbangan nasional Indonesia. Memerlukan training ketat untuk standar keselamatan penerbangan, service excellence, dan compliance regulasi internasional.",
+        "website": "https://www.garuda-indonesia.com",
+        "linkedin_url": "https://www.linkedin.com/company/garuda-indonesia",
+        "location": "Tangerang, Indonesia",
+    },
+    {
+        "id": "dummy-014",
+        "name": "Bukalapak",
+        "industry": "E-commerce & Technology",
+        "employee_count": 2800,
+        "description": "Platform e-commerce yang bertransformasi menjadi all-commerce platform. Fokus pada pengembangan talenta digital dan reskilling karyawan untuk arah bisnis baru.",
+        "website": "https://www.bukalapak.com",
+        "linkedin_url": "https://www.linkedin.com/company/bukalapak",
+        "location": "Jakarta, Indonesia",
+    },
+    {
+        "id": "dummy-015",
+        "name": "Maybank Indonesia",
+        "industry": "Banking",
+        "employee_count": 8500,
+        "description": "Bank internasional dengan operasi besar di Indonesia. Aktif mengembangkan program digital banking dan membutuhkan learning platform yang terintegrasi dengan sistem HR global.",
+        "website": "https://www.maybank.co.id",
+        "linkedin_url": "https://www.linkedin.com/company/maybank-indonesia",
+        "location": "Jakarta, Indonesia",
+    },
+]
+
+DUMMY_CONTACTS: dict = {
+    "dummy-001": Contact(name="Hendra Gunawan", role="Head of Learning & Development", linkedin_url="https://linkedin.com/in/dummy", email="hendra.gunawan@bca.co.id"),
+    "dummy-002": Contact(name="Sari Dewi Pratiwi", role="VP Human Capital Development", linkedin_url="https://linkedin.com/in/dummy", email="sari.dewi@telkom.co.id"),
+    "dummy-003": Contact(name="Budi Santoso", role="Chief People Officer", linkedin_url="https://linkedin.com/in/dummy", email="budi.santoso@astra.co.id"),
+    "dummy-004": Contact(name="Rina Kusuma", role="HR Director - Learning & Development", linkedin_url="https://linkedin.com/in/dummy", email="rina.kusuma@bankmandiri.co.id"),
+    "dummy-005": Contact(name="Agus Hermawan", role="Head of Talent Development", linkedin_url="https://linkedin.com/in/dummy", email="agus.h@tokopedia.com"),
+    "dummy-006": Contact(name="Diana Lestari", role="Learning & Development Manager", linkedin_url="https://linkedin.com/in/dummy", email="diana.lestari@prudential.co.id"),
+    "dummy-007": Contact(name="Wahyu Pratama", role="HR Training Manager", linkedin_url="https://linkedin.com/in/dummy", email="wahyu.pratama@matahari.com"),
+    "dummy-008": Contact(name="Nadia Rahayu", role="People Development Lead", linkedin_url="https://linkedin.com/in/dummy", email="nadia.r@gojek.com"),
+    "dummy-009": Contact(name="Darmawan Setiadi", role="VP Corporate University", linkedin_url="https://linkedin.com/in/dummy", email="darmawan.s@pertamina.com"),
+    "dummy-010": Contact(name="Fitri Handayani", role="Head of HR Training", linkedin_url="https://linkedin.com/in/dummy", email="fitri.h@indofood.com"),
+    "dummy-011": Contact(name="Surya Wijaya", role="Head of Learning Center", linkedin_url="https://linkedin.com/in/dummy", email="surya.w@bri.co.id"),
+    "dummy-012": Contact(name="Kevin Tanaka", role="Talent Development Manager", linkedin_url="https://linkedin.com/in/dummy", email="kevin.t@shopee.com"),
+    "dummy-013": Contact(name="Putri Anggraeni", role="Training & Development Manager", linkedin_url="https://linkedin.com/in/dummy", email="putri.a@garuda-indonesia.com"),
+    "dummy-014": Contact(name="Reza Firmansyah", role="Head of People Operations", linkedin_url="https://linkedin.com/in/dummy", email="reza.f@bukalapak.com"),
+    "dummy-015": Contact(name="Melissa Santoso", role="HR Learning Solutions Manager", linkedin_url="https://linkedin.com/in/dummy", email="melissa.s@maybank.co.id"),
+}
+
+
+def get_dummy_companies() -> List[Company]:
+    return [Company(**c) for c in DUMMY_COMPANIES]
+
+
+def get_dummy_contact(company_id: str) -> Optional[Contact]:
+    return DUMMY_CONTACTS.get(company_id)

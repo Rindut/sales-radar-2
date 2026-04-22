@@ -1,0 +1,337 @@
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { api, Lead, OutreachDraft } from "../../lib/api";
+import Sidebar from "../../components/Sidebar";
+
+function scoreBadgeStyle(score: number): { color: string; background: string } {
+  if (score >= 85) return { color: "#1D8EDE", background: "#ddf0fc" };
+  if (score >= 70) return { color: "#F5A623", background: "#FFF3DC" };
+  return { color: "#7aaecb", background: "#EBF5FD" };
+}
+
+function ScoreBadge({ score, size = "md" }: { score: number; size?: "md" | "xl" }) {
+  const { color, background } = scoreBadgeStyle(score);
+  const sizeStyle = size === "xl"
+    ? { fontSize: 48, padding: "14px 28px", borderRadius: 16 }
+    : { fontSize: 15, padding: "5px 12px", borderRadius: 8 };
+  return (
+    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color, background, display: "inline-block", letterSpacing: "-0.5px", ...sizeStyle }}>
+      {score}
+    </span>
+  );
+}
+
+function LinkedInIcon() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1.5 2.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0ZM1.5 5H3.5V12.5H1.5V5ZM5 5h2v1.02C7.35 5.37 8.05 5 9 5c1.93 0 3 1.2 3 3.2V12.5H10V8.5C10 7.4 9.55 7 8.75 7 7.9 7 7.5 7.5 7.5 8.5V12.5H5.5V5H5Z"/></svg>;
+}
+function CopyIcon() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2 9.5V2.5A1 1 0 0 1 3 1.5H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
+}
+
+export default function LeadDetail() {
+  const router = useRouter();
+  const { id } = router.query;
+
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [outreach, setOutreach] = useState<OutreachDraft | null>(null);
+  const [draft, setDraft] = useState("");
+  const [outreachLoading, setOutreachLoading] = useState(false);
+  const [channel, setChannel] = useState<"linkedin" | "email" | "whatsapp">("linkedin");
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    api.getLeadDetail(id as string)
+      .then(setLead)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+    if (window.location.hash === "#outreach") {
+      setTimeout(() => document.getElementById("outreach")?.scrollIntoView({ behavior: "smooth" }), 600);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setOutreach(null);
+    setDraft("");
+    setOutreachLoading(true);
+    api.generateOutreach(id as string, channel)
+      .then(d => { setOutreach(d); setDraft(d.message); })
+      .catch((e: any) => setError(e.message))
+      .finally(() => setOutreachLoading(false));
+  }, [id, channel]);
+
+  const handleCopy = () => {
+    const text = outreach?.subject ? `Subject: ${outreach.subject}\n\n${draft}` : draft;
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) return (
+    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
+      <Sidebar active="dashboard" />
+      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--canvas)" }}>
+        <div style={spinner} />
+      </main>
+    </div>
+  );
+  if (error) return (
+    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
+      <Sidebar active="dashboard" />
+      <main style={{ flex: 1, padding: 40, background: "var(--canvas)" }}>
+        <p style={{ color: "#ef4444" }}>⚠ {error}</p>
+      </main>
+    </div>
+  );
+  if (!lead) return null;
+
+  const score = Math.round(lead.score.total);
+  const contact = lead.contact;
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
+      <Sidebar active="dashboard" />
+
+      <main style={{ flex: 1, background: "var(--canvas)", overflowY: "auto" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 28px 80px" }}>
+
+          {/* Back */}
+          <button
+            onClick={() => router.push("/")}
+            className="fade-up"
+            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 28, background: "none", border: "none", color: "var(--text-2)", fontSize: 13, fontWeight: 500, padding: 0, cursor: "pointer", transition: "color 0.15s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            Kembali ke Today's 5
+          </button>
+
+          {/* Header card — dark blue with decorative circles */}
+          <div className="fade-up" style={{
+            background: "var(--sidebar-bg)", borderRadius: 16, padding: "28px 32px",
+            marginBottom: 20, position: "relative", overflow: "hidden",
+          }}>
+            <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.06)" }} />
+            <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.10)" }} />
+
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Lead Detail</div>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: "#fff", letterSpacing: "-0.8px", lineHeight: 1.1, marginBottom: 6 }}>{lead.company.name}</h1>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>
+                  {[lead.company.industry, lead.company.employee_count ? `${lead.company.employee_count.toLocaleString()}+ karyawan` : null, lead.company.location].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                <ScoreBadge score={score} size="xl" />
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>PRIORITY SCORE</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+              {lead.company.website && (
+                <a href={lead.company.website} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", color: "#fff", fontSize: 13, fontWeight: 600, background: "transparent", textDecoration: "none" }}>
+                  🌐 Website
+                </a>
+              )}
+              {lead.company.linkedin_url && (
+                <a href={lead.company.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                  <LinkedInIcon /> LinkedIn
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Why This Company */}
+          <Section className="fade-up fade-up-1" title="⭐ Why This Company" subtitle="Alasan sistem memilih company ini hari ini">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {lead.score.reasoning.map((r, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "flex-start", gap: 14,
+                  background: "var(--accent-dim)", borderRadius: 10, padding: "14px 16px",
+                  border: "1px solid rgba(29,142,222,0.15)",
+                }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: "var(--accent)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>
+                    {i + 1}
+                  </div>
+                  <span style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.5, paddingTop: 2 }}>{r}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* Company Overview */}
+          {lead.company.description && (
+            <Section className="fade-up fade-up-2" title="Company Overview">
+              <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, marginBottom: 16 }}>{lead.company.description}</p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  lead.company.industry && { label: "Industry", value: lead.company.industry },
+                  lead.company.employee_count && { label: "Ukuran", value: `${lead.company.employee_count.toLocaleString()}+ karyawan` },
+                  lead.company.location && { label: "Lokasi", value: lead.company.location },
+                ].filter(Boolean).map((it: any) => (
+                  <div key={it.label} style={{ background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 16px" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{it.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{it.value}</div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Contact Person */}
+          {contact && (
+            <Section className="fade-up fade-up-3" title="Contact Person">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--canvas-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "var(--text-2)" }}>
+                    {(contact.name || "?").split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{contact.name}</div>
+                    <div style={{ fontSize: 13, color: "var(--text-2)", marginTop: 2 }}>{contact.role}</div>
+                    {contact.email && <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{contact.email}</div>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {contact.linkedin_url && (
+                    <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                      <LinkedInIcon /> Buka LinkedIn
+                    </a>
+                  )}
+                  {contact.email && (
+                    <a href={`mailto:${contact.email}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                      Kirim Email
+                    </a>
+                  )}
+                </div>
+              </div>
+            </Section>
+          )}
+
+          {/* Outreach Assistant */}
+          <Section
+            className="fade-up fade-up-4"
+            title="Outreach Assistant"
+            id="outreach"
+            badge={<span style={{ fontSize: 11, background: "var(--canvas-2)", color: "var(--text-2)", padding: "2px 8px", borderRadius: 6, fontWeight: 600, marginLeft: 8 }}>AI-generated</span>}
+          >
+            {/* Channel selector */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 13, color: "var(--text-2)" }}>Channel:</span>
+              {(["linkedin", "email", "whatsapp"] as const).map(ch => (
+                <button
+                  key={ch}
+                  onClick={() => setChannel(ch)}
+                  style={{
+                    padding: "5px 12px", borderRadius: 8,
+                    border: `1px solid ${channel === ch ? "var(--accent)" : "var(--border)"}`,
+                    background: channel === ch ? "var(--accent-dim)" : "transparent",
+                    color: channel === ch ? "var(--accent-text)" : "var(--text-2)",
+                    fontSize: 13, fontWeight: channel === ch ? 600 : 400,
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}
+                >
+                  {ch === "linkedin" ? "LinkedIn" : ch === "email" ? "Email" : "WhatsApp"}
+                </button>
+              ))}
+              {channel === "linkedin" && (
+                <span style={{ fontSize: 11, color: "var(--accent-text)", fontWeight: 600 }}>✓ Recommended</span>
+              )}
+            </div>
+
+            {/* Subject line (email) */}
+            {outreach?.subject && (
+              <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 10 }}>
+                <strong>Subject:</strong> {outreach.subject}
+              </div>
+            )}
+
+            {/* Draft textarea — loading skeleton or editable */}
+            {outreachLoading ? (
+              <div style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--canvas)", padding: 16 }}>
+                {[100, 90, 85, 70].map((w, i) => (
+                  <div key={i} className="skeleton" style={{ height: 14, background: "var(--border)", borderRadius: 6, width: `${w}%`, marginBottom: i < 3 ? 10 : 0 }} />
+                ))}
+              </div>
+            ) : (
+              <textarea
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                style={{
+                  width: "100%", minHeight: 220, padding: 16,
+                  border: "1px solid var(--border)", borderRadius: 10,
+                  background: "var(--canvas)", color: "var(--text)",
+                  fontSize: 13, lineHeight: 1.7, resize: "vertical",
+                  outline: "none", fontFamily: "var(--font-body)",
+                  transition: "border-color 0.15s",
+                }}
+                onFocus={e => (e.target.style.borderColor = "var(--accent)")}
+                onBlur={e => (e.target.style.borderColor = "var(--border)")}
+              />
+            )}
+
+            {/* Tips */}
+            {outreach && outreach.tips.length > 0 && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: 12 }}>
+                {outreach.tips.map((tip, i) => (
+                  <p key={i} style={{ fontSize: 13, color: "var(--text-3)", margin: "4px 0", fontStyle: "italic" }}>💡 {tip}</p>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button
+                onClick={handleCopy}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "10px 20px", borderRadius: 8, border: "none",
+                  background: copied ? "var(--accent)" : "var(--text)",
+                  color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                <CopyIcon /> {copied ? "Tersalin! ✓" : "Copy Message"}
+              </button>
+              {contact?.linkedin_url && channel === "linkedin" && (
+                <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+                  <LinkedInIcon /> Buka LinkedIn
+                </a>
+              )}
+            </div>
+          </Section>
+
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Section({ title, subtitle, badge, children, className, id }: {
+  title: string; subtitle?: string; badge?: React.ReactNode;
+  children: React.ReactNode; className?: string; id?: string;
+}) {
+  return (
+    <div id={id} className={className} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16, boxShadow: "var(--shadow)" }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.3px" }}>{title}</h2>
+          {badge}
+        </div>
+        {subtitle && <p style={{ fontSize: 13, color: "var(--text-3)", marginTop: 4 }}>{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const spinner: React.CSSProperties = {
+  width: 36, height: 36,
+  border: "3px solid var(--border)", borderTop: "3px solid var(--accent)",
+  borderRadius: "50%", animation: "spin 1s linear infinite",
+};
