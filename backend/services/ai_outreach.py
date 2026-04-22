@@ -6,6 +6,25 @@ from typing import Optional
 _has_key = bool(OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here")
 client = AsyncOpenAI(api_key=OPENAI_API_KEY) if _has_key else None
 
+SENDER_PROFILE = {
+    "name": "Anna Savira",
+    "position": "Sales Executive",
+    "company": "Bawana",
+    "email": "anna.savira@bawana.com",
+    "phone": "+62 812-9278-9875",
+}
+
+SIGNATURE = {
+    "linkedin": "Anna Savira | Sales Executive, Bawana",
+    "email": (
+        "Salam hangat,\n"
+        "Anna Savira\n"
+        "Sales Executive, Bawana\n"
+        f"anna.savira@bawana.com | +62 812-9278-9875"
+    ),
+    "whatsapp": "- Anna (Bawana)",
+}
+
 
 def _mock_draft(company: Company, contact: Optional[Contact], channel: str) -> OutreachDraft:
     first_name = contact.name.split()[0] if contact and contact.name else "Bapak/Ibu"
@@ -13,7 +32,7 @@ def _mock_draft(company: Company, contact: Optional[Contact], channel: str) -> O
 
     templates = {
         "linkedin": (
-            f"Halo {first_name}, saya dari Bawana — platform LXP B2B yang membantu perusahaan "
+            f"Halo {first_name}, saya Anna dari Bawana — platform LXP B2B yang membantu perusahaan "
             f"di industri {industry} meningkatkan efektivitas dan engagement learning karyawan. "
             f"Boleh saya share bagaimana kami membantu perusahaan serupa?"
         ),
@@ -25,12 +44,12 @@ def _mock_draft(company: Company, contact: Optional[Contact], channel: str) -> O
             f"merancang pengalaman belajar yang lebih engaging — dari structured courses, "
             f"learning journey, hingga content production dalam Bahasa Indonesia.\n\n"
             f"Apakah ada waktu 20 menit minggu ini untuk saya ceritakan lebih lanjut?\n\n"
-            f"Salam,\nTim Sales Bawana"
+            f"{SIGNATURE['email']}"
         ),
         "whatsapp": (
-            f"Halo {first_name}, saya dari Bawana LXP. "
+            f"Halo {first_name}, saya Anna dari Bawana LXP. "
             f"Kami bantu perusahaan seperti {company.name} tingkatkan efektivitas training karyawan. "
-            f"Boleh terhubung sebentar?"
+            f"Boleh terhubung sebentar? {SIGNATURE['whatsapp']}"
         ),
     }
 
@@ -62,34 +81,53 @@ async def generate_outreach_draft(
     reasoning_text = "\n".join([f"- {r}" for r in score.reasoning])
 
     channel_instruction = {
-        "linkedin": "Tulis LinkedIn message yang singkat, personal, tidak terkesan spam. Maksimal 300 karakter. Jangan pitch langsung.",
-        "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA.",
-        "whatsapp": "Tulis pesan WhatsApp singkat dan conversational. Maksimal 200 karakter.",
+        "linkedin": "Tulis LinkedIn message yang singkat, personal, tidak terkesan spam. Maksimal 300 karakter. Jangan pitch langsung. Gunakan nama depan 'Anna' sebagai pengirim.",
+        "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA. Akhiri dengan signature lengkap.",
+        "whatsapp": "Tulis pesan WhatsApp singkat dan conversational. Maksimal 200 karakter. Perkenalkan diri sebagai Anna dari Bawana.",
     }.get(channel, "Tulis pesan singkat dan personal.")
+
+    signature_instruction = {
+        "linkedin": f"Signature: {SIGNATURE['linkedin']}",
+        "email": f"Gunakan signature ini persis:\n{SIGNATURE['email']}",
+        "whatsapp": f"Akhiri dengan: {SIGNATURE['whatsapp']}",
+    }.get(channel, "")
 
     prompt = f"""Kamu adalah sales assistant dari Bawana, sebuah LXP B2B di Indonesia.
 
 {BAWANA_CONTEXT}
 
-Company: {company.name}
-Industri: {company.industry or 'tidak diketahui'}
-Ukuran: {company.employee_count or 'tidak diketahui'} karyawan
-Lokasi: {company.location or 'tidak diketahui'}
-Deskripsi: {company.description or 'tidak tersedia'}
+Pengirim pesan ini adalah:
+- Nama: {SENDER_PROFILE['name']}
+- Posisi: {SENDER_PROFILE['position']}
+- Email: {SENDER_PROFILE['email']}
+- No HP: {SENDER_PROFILE['phone']}
+
+Company yang di-approach:
+- Nama: {company.name}
+- Industri: {company.industry or 'tidak diketahui'}
+- Ukuran: {company.employee_count or 'tidak diketahui'} karyawan
+- Lokasi: {company.location or 'tidak diketahui'}
+- Deskripsi: {company.description or 'tidak tersedia'}
 {contact_info}
 
-Alasan dipilih:
+Alasan company ini dipilih:
 {reasoning_text}
 
-Instruksi: {channel_instruction}
+Instruksi channel: {channel_instruction}
 
-Tulis pesan yang personal, relevan, tidak langsung jualan, Bahasa Indonesia natural.
-{"Tambahkan subject line." if channel == "email" else ""}
+{signature_instruction}
 
-Format:
-{"SUBJECT: [subject]" if channel == "email" else ""}
+Tulis pesan yang:
+1. Personal dan tidak generik
+2. Relevan dengan industri dan konteks perusahaan
+3. Tidak langsung jualan — buka percakapan dulu
+4. Bahasa Indonesia yang natural dan profesional
+5. Sebutkan nama contact jika tersedia
+
+Format response:
+{"SUBJECT: [subject line]" if channel == "email" else ""}
 MESSAGE:
-[pesan]
+[isi pesan]
 
 TIPS:
 - [tip 1]
