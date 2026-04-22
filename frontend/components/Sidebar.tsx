@@ -24,7 +24,7 @@ export default function Sidebar({ active }: { active: Page }) {
     <aside style={{
       width: collapsed ? 64 : 220,
       background: "var(--sidebar-bg)",
-      display: "flex", flexDirection: "column", justifyContent: "space-between",
+      display: "flex", flexDirection: "column",
       padding: collapsed ? "28px 8px" : "28px 12px",
       flexShrink: 0, minHeight: "100vh",
       transition: "width 0.2s ease, padding 0.2s ease",
@@ -34,49 +34,63 @@ export default function Sidebar({ active }: { active: Page }) {
         {/* Logo + collapse toggle */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", padding: "0 8px 20px" }}>
           {!collapsed && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: "rgba(255,255,255,0.2)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <circle cx="9" cy="9" r="7" stroke="#fff" strokeWidth="1.8" fill="none" />
-                  <circle cx="9" cy="9" r="3.5" stroke="#fff" strokeWidth="1.8" fill="none" />
-                  <circle cx="9" cy="9" r="1" fill="#fff" />
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#fff", letterSpacing: "-0.3px" }}>Sales Radar</div>
-                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontWeight: 500, letterSpacing: "0.5px", textTransform: "uppercase" as const }}>2.0</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.png"
+                alt="Sales Radar"
+                style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }}
+              />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#fff", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>SALES RADAR</div>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontWeight: 500, letterSpacing: "0.5px" }}>by BAWANA</div>
               </div>
             </div>
           )}
 
           {collapsed && (
-            <div style={{ width: 32, height: 32, background: "rgba(255,255,255,0.2)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <circle cx="9" cy="9" r="7" stroke="#fff" strokeWidth="1.8" fill="none" />
-                <circle cx="9" cy="9" r="3.5" stroke="#fff" strokeWidth="1.8" fill="none" />
-                <circle cx="9" cy="9" r="1" fill="#fff" />
-              </svg>
-            </div>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/logo.png"
+              alt="Sales Radar"
+              style={{ width: 28, height: 28, objectFit: "contain", marginBottom: 8 }}
+            />
           )}
 
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            style={{
-              background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 6,
-              width: 24, height: 24, cursor: "pointer", display: "flex",
-              alignItems: "center", justifyContent: "center", flexShrink: 0,
-              marginLeft: collapsed ? 0 : 4,
-              marginTop: collapsed ? 8 : 0,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              {collapsed
-                ? <path d="M4 2l4 4-4 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                : <path d="M8 2L4 6l4 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              }
-            </svg>
-          </button>
+          {!collapsed && (
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 6,
+                width: 24, height: 24, cursor: "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center", flexShrink: 0,
+                marginLeft: 8,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M8 2L4 6l4 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </div>
+
+        {/* Collapse button when collapsed — separate row */}
+        {collapsed && (
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 6,
+                width: 24, height: 24, cursor: "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M4 2l4 4-4 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Date chip */}
         {!collapsed && (
@@ -116,19 +130,6 @@ export default function Sidebar({ active }: { active: Page }) {
             </button>
           ))}
         </nav>
-      </div>
-
-      {/* User footer */}
-      <div style={{ padding: collapsed ? "16px 0 0" : "16px 8px 0", borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: collapsed ? 0 : 10, justifyContent: collapsed ? "center" : "flex-start" }}>
-          <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff", fontWeight: 700, flexShrink: 0 }}>AR</div>
-          {!collapsed && (
-            <div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.9)", fontWeight: 600 }}>Andi Rachman</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)" }}>Account Executive</div>
-            </div>
-          )}
-        </div>
       </div>
     </aside>
   );
