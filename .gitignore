@@ -39,6 +39,13 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# TypeScript build info
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# Claude local settings
+.claude/settings.local.json
+
 # Editor
 .vscode/
 .idea/
