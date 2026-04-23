@@ -1,7 +1,22 @@
 import type { AppProps } from "next/app";
 import Head from "next/head";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
+
+const SESSION_KEY = "sr_auth";
+const PUBLIC_PAGES = ["/login"];
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const isPublic = PUBLIC_PAGES.includes(router.pathname);
+    const isAuth = typeof window !== "undefined" && sessionStorage.getItem(SESSION_KEY) === "ok";
+    if (!isPublic && !isAuth) {
+      router.replace("/login");
+    }
+  }, [router.pathname]);
+
   return (
     <>
       <Head>
