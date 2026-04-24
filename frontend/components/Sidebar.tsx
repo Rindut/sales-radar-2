@@ -13,11 +13,9 @@ export default function Sidebar({ active }: { active: Page }) {
   const dateStr = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
 
   const nav: { id: Page; label: string; href: string; badge?: string; icon: JSX.Element }[] = [
-    { id: "dashboard", label: "Leads",           href: "/",           badge: "10", icon: <TargetIcon /> },
-    { id: "pipeline",  label: "Pipeline",         href: "/pipeline",               icon: <PipelineIcon /> },
-    { id: "history",   label: "Outreach History", href: "/history",                icon: <HistoryIcon /> },
-    { id: "playbook",  label: "Playbook",         href: "/playbook",               icon: <PlaybookIcon /> },
-    { id: "settings",  label: "Settings",         href: "/settings",               icon: <SettingsIcon /> },
+    { id: "dashboard", label: "Leads",    href: "/",         badge: "10", icon: <TargetIcon /> },
+    { id: "playbook",  label: "Playbook", href: "/playbook",              icon: <PlaybookIcon /> },
+    { id: "settings",  label: "Settings", href: "/settings",              icon: <SettingsIcon /> },
   ];
 
   return (
@@ -74,7 +72,7 @@ export default function Sidebar({ active }: { active: Page }) {
           )}
         </div>
 
-        {/* Collapse button when collapsed — separate row */}
+        {/* Collapse button when collapsed */}
         {collapsed && (
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
             <button
@@ -137,12 +135,6 @@ export default function Sidebar({ active }: { active: Page }) {
 
 function TargetIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>;
-}
-function PipelineIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="3" height="10" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="6" y="5" width="3" height="8" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="7" width="3" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/></svg>;
-}
-function HistoryIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 }
 function PlaybookIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><rect x="10" y="8" width="4" height="4" rx="1" fill="currentColor" opacity="0.3"/></svg>;
