@@ -71,28 +71,33 @@ export default function Login() {
         </h1>
         <p style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 32 }}>by BAWANA</p>
 
-        <input
-          type="password"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()}
-          placeholder="Masukkan password"
-          autoFocus
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            borderRadius: 10,
-            border: `1.5px solid ${error ? "#ef4444" : "var(--border)"}`,
-            background: error ? "#fef2f2" : "var(--canvas)",
-            fontSize: 16,
-            color: "var(--text)",
-            outline: "none",
-            textAlign: "center",
-            letterSpacing: 8,
-            marginBottom: 12,
-            transition: "border-color 0.2s",
-          }}
-        />
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          <svg style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#aab" }} width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="3" y="7" width="10" height="8" rx="2" stroke="#aab" strokeWidth="1.4"/>
+            <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="#aab" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="password"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSubmit()}
+            placeholder="Password"
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "13px 16px 13px 40px",
+              borderRadius: 12,
+              border: error ? "1.5px solid #ef4444" : "none",
+              background: error ? "#fef2f2" : "#f0f2f5",
+              fontSize: 15,
+              color: "var(--text)",
+              outline: "none",
+              letterSpacing: input ? 3 : 0,
+              transition: "all 0.2s",
+              boxSizing: "border-box" as const,
+            }}
+          />
+        </div>
 
         {error && (
           <p style={{ fontSize: 12, color: "#ef4444", marginBottom: 12 }}>
@@ -104,17 +109,17 @@ export default function Login() {
           onClick={handleSubmit}
           style={{
             width: "100%",
-            padding: "12px",
-            borderRadius: 10,
+            padding: "14px",
+            borderRadius: 12,
             border: "none",
             background: "var(--accent)",
             color: "#fff",
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 700,
             cursor: "pointer",
           }}
         >
-          Masuk →
+          Access Dashboard
         </button>
       </div>
 

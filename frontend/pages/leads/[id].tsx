@@ -28,6 +28,34 @@ function CopyIcon() {
   return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2 9.5V2.5A1 1 0 0 1 3 1.5H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 }
 
+interface HistoryEntry {
+  id: string;
+  type: "outreach" | "note";
+  channel?: string;
+  contact?: string;
+  status?: "sent" | "replied" | "no_response";
+  note?: string;
+  date: string;
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  sent:        { label: "Sent",        color: "#1D8EDE", bg: "#ddf0fc" },
+  replied:     { label: "Replied",     color: "#16a34a", bg: "#dcfce7" },
+  no_response: { label: "No Response", color: "#d97706", bg: "#fef3c7" },
+};
+
+function getHistory(companyId: string): HistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(`history_${companyId}`) || "[]");
+  } catch { return []; }
+}
+
+function saveHistory(companyId: string, entries: HistoryEntry[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(`history_${companyId}`, JSON.stringify(entries));
+}
+
 export default function LeadDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -41,12 +69,18 @@ export default function LeadDetail() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Outreach History
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [noteInput, setNoteInput] = useState("");
+  const [outreachStatus, setOutreachStatus] = useState<"sent" | "replied" | "no_response">("sent");
+
   useEffect(() => {
     if (!id) return;
     api.getLeadDetail(id as string)
       .then(setLead)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    setHistory(getHistory(id as string));
     if (window.location.hash === "#outreach") {
       setTimeout(() => document.getElementById("outreach")?.scrollIntoView({ behavior: "smooth" }), 600);
     }
@@ -68,6 +102,42 @@ export default function LeadDetail() {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const addOutreachEntry = () => {
+    if (!id || !lead) return;
+    const entry: HistoryEntry = {
+      id: Date.now().toString(),
+      type: "outreach",
+      channel,
+      contact: lead.contact?.name || undefined,
+      status: outreachStatus,
+      date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
+    };
+    const updated = [entry, ...history];
+    setHistory(updated);
+    saveHistory(id as string, updated);
+  };
+
+  const addNote = () => {
+    if (!id || !noteInput.trim()) return;
+    const entry: HistoryEntry = {
+      id: Date.now().toString(),
+      type: "note",
+      note: noteInput.trim(),
+      date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
+    };
+    const updated = [entry, ...history];
+    setHistory(updated);
+    saveHistory(id as string, updated);
+    setNoteInput("");
+  };
+
+  const deleteEntry = (entryId: string) => {
+    if (!id) return;
+    const updated = history.filter(h => h.id !== entryId);
+    setHistory(updated);
+    saveHistory(id as string, updated);
   };
 
   if (loading) return (
@@ -110,7 +180,7 @@ export default function LeadDetail() {
             Kembali ke Today's 5
           </button>
 
-          {/* Header card — dark blue with decorative circles */}
+          {/* Header card */}
           <div className="fade-up" style={{
             background: "var(--sidebar-bg)", borderRadius: 16, padding: "28px 32px",
             marginBottom: 20, position: "relative", overflow: "hidden",
@@ -152,36 +222,16 @@ export default function LeadDetail() {
               {lead.score.reasoning.map((r, i) => (
                 <div key={i} style={{
                   display: "flex", alignItems: "flex-start", gap: 14,
-                  background: "var(--accent-dim)", borderRadius: 10, padding: "14px 16px",
-                  border: "1px solid rgba(29,142,222,0.15)",
+                  padding: "12px 16px", borderRadius: 10,
+                  background: i === 0 ? "var(--accent-dim)" : "var(--canvas)",
+                  border: `1px solid ${i === 0 ? "rgba(29,142,222,0.2)" : "var(--border)"}`,
                 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 6, background: "var(--accent)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>
-                    {i + 1}
-                  </div>
-                  <span style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.5, paddingTop: 2 }}>{r}</span>
+                  <div style={{ marginTop: 2, width: 6, height: 6, borderRadius: "50%", background: i === 0 ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 14, color: i === 0 ? "var(--accent-text)" : "var(--text)", lineHeight: 1.6, fontWeight: i === 0 ? 600 : 400 }}>{r}</span>
                 </div>
               ))}
             </div>
           </Section>
-
-          {/* Company Overview */}
-          {lead.company.description && (
-            <Section className="fade-up fade-up-2" title="Company Overview">
-              <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, marginBottom: 16 }}>{lead.company.description}</p>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {[
-                  lead.company.industry && { label: "Industry", value: lead.company.industry },
-                  lead.company.employee_count && { label: "Ukuran", value: `${lead.company.employee_count.toLocaleString()}+ karyawan` },
-                  lead.company.location && { label: "Lokasi", value: lead.company.location },
-                ].filter(Boolean).map((it: any) => (
-                  <div key={it.label} style={{ background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 16px" }}>
-                    <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{it.label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{it.value}</div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
 
           {/* Contact Person */}
           {contact && (
@@ -220,7 +270,6 @@ export default function LeadDetail() {
             id="outreach"
             badge={<span style={{ fontSize: 11, background: "var(--canvas-2)", color: "var(--text-2)", padding: "2px 8px", borderRadius: 6, fontWeight: 600, marginLeft: 8 }}>AI-generated</span>}
           >
-            {/* Channel selector */}
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: 13, color: "var(--text-2)" }}>Channel:</span>
               {(["linkedin", "email", "whatsapp"] as const).map(ch => (
@@ -244,14 +293,12 @@ export default function LeadDetail() {
               )}
             </div>
 
-            {/* Subject line (email) */}
             {outreach?.subject && (
               <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 10 }}>
                 <strong>Subject:</strong> {outreach.subject}
               </div>
             )}
 
-            {/* Draft textarea — loading skeleton or editable */}
             {outreachLoading ? (
               <div style={{ border: "1px solid var(--border)", borderRadius: 10, background: "var(--canvas)", padding: 16 }}>
                 {[100, 90, 85, 70].map((w, i) => (
@@ -275,7 +322,6 @@ export default function LeadDetail() {
               />
             )}
 
-            {/* Tips */}
             {outreach && outreach.tips.length > 0 && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: 12 }}>
                 {outreach.tips.map((tip, i) => (
@@ -284,7 +330,6 @@ export default function LeadDetail() {
               </div>
             )}
 
-            {/* Actions */}
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
               <button
                 onClick={handleCopy}
@@ -303,6 +348,93 @@ export default function LeadDetail() {
                   <LinkedInIcon /> Buka LinkedIn
                 </a>
               )}
+            </div>
+          </Section>
+
+          {/* Outreach History */}
+          <Section className="fade-up fade-up-5" title="Outreach History" subtitle={history.length > 0 ? `${history.length} outreach tercatat` : "Belum ada outreach"}>
+
+            {/* Timeline */}
+            {history.length > 0 && (
+              <div style={{ position: "relative", marginBottom: 20 }}>
+                <div style={{ position: "absolute", left: 11, top: 0, bottom: 0, width: 2, background: "var(--border)" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {history.map((entry) => (
+                    <div key={entry.id} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                      {/* Timeline dot */}
+                      <div style={{
+                        width: 24, height: 24, borderRadius: "50%", flexShrink: 0, zIndex: 1,
+                        background: entry.type === "note" ? "var(--canvas-2)" : (entry.status === "replied" ? "#dcfce7" : "var(--accent-dim)"),
+                        border: `2px solid ${entry.type === "note" ? "var(--border)" : (entry.status === "replied" ? "#16a34a" : "var(--accent)")}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: entry.type === "note" ? "var(--text-3)" : (entry.status === "replied" ? "#16a34a" : "var(--accent)") }} />
+                      </div>
+
+                      {/* Entry card */}
+                      <div style={{ flex: 1, background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: entry.type === "note" ? 6 : 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {entry.type === "outreach" ? (
+                              <>
+                                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "var(--accent-dim)", color: "var(--accent-text)" }}>
+                                  {entry.channel === "linkedin" ? "LinkedIn" : entry.channel === "email" ? "Email" : "WhatsApp"}
+                                </span>
+                                {entry.contact && <span style={{ fontSize: 12, color: "var(--text-2)" }}>{entry.contact}</span>}
+                                <span style={{ fontSize: 11, color: "var(--text-3)" }}>· {entry.date}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "var(--canvas-2)", color: "var(--text-2)" }}>Note</span>
+                                <span style={{ fontSize: 11, color: "var(--text-3)" }}>· {entry.date}</span>
+                              </>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {entry.status && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: STATUS_LABELS[entry.status].color }}>
+                                {STATUS_LABELS[entry.status].label}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => deleteEntry(entry.id)}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
+                            >×</button>
+                          </div>
+                        </div>
+                        {entry.note && (
+                          <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{entry.note}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add note */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" as const }}>Tambah Catatan</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={noteInput}
+                  onChange={e => setNoteInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addNote()}
+                  placeholder="Catatan tambahan selain outreach di atas"
+                  style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 8,
+                    border: "1px solid var(--border)", background: "var(--canvas)",
+                    fontSize: 13, color: "var(--text)", outline: "none",
+                    fontFamily: "var(--font-body)",
+                  }}
+                />
+                <button
+                  onClick={addNote}
+                  style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--text)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                >
+                  + Tambah
+                </button>
+              </div>
             </div>
           </Section>
 
