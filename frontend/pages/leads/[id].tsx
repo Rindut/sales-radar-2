@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { api, Lead, OutreachDraft } from "../../lib/api";
+import { api, Lead, OutreachDraft, SendEmailRequest } from "../../lib/api";
 import Sidebar from "../../components/Sidebar";
 
 function scoreBadgeStyle(score: number): { color: string; background: string } {
@@ -27,6 +27,12 @@ function LinkedInIcon() {
 function CopyIcon() {
   return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2 9.5V2.5A1 1 0 0 1 3 1.5H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 }
+function EmailIcon() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M1 4l6 4.5L13 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
+}
+function WhatsAppIcon() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 0C3.13 0 0 3.13 0 7c0 1.23.33 2.4.9 3.4L0 14l3.7-.87A6.96 6.96 0 0 0 7 14c3.87 0 7-3.13 7-7s-3.13-7-7-7Zm3.45 9.7c-.15.42-.87.8-1.2.85-.3.04-.68.06-1.1-.07a9.8 9.8 0 0 1-1-.37C6.1 9.48 5.1 8.3 5 8.16c-.1-.14-.8-1.06-.8-2.02 0-.96.5-1.43.68-1.63.18-.2.4-.25.53-.25h.38c.12 0 .29-.05.45.34l.58 1.4c.05.1.08.22.02.35l-.22.32-.3.32c-.1.1-.2.2-.09.4.12.2.52.86 1.12 1.4.77.68 1.42.9 1.62 1 .2.1.32.08.44-.05l.5-.6c.13-.16.25-.13.42-.08l1.3.62c.15.07.25.1.29.17.04.07.04.4-.1.82Z"/></svg>;
+}
 
 interface HistoryEntry {
   id: string;
@@ -46,9 +52,8 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
 
 function getHistory(companyId: string): HistoryEntry[] {
   if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(`history_${companyId}`) || "[]");
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(`history_${companyId}`) || "[]"); }
+  catch { return []; }
 }
 
 function saveHistory(companyId: string, entries: HistoryEntry[]) {
@@ -69,27 +74,29 @@ export default function LeadDetail() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Email send state
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [showEmailInput, setShowEmailInput] = useState(false);
+
   // Outreach History
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [noteInput, setNoteInput] = useState("");
-  const [outreachStatus, setOutreachStatus] = useState<"sent" | "replied" | "no_response">("sent");
 
   useEffect(() => {
     if (!id) return;
     api.getLeadDetail(id as string)
-      .then(setLead)
+      .then(l => { setLead(l); if (l.contact?.email) setEmailTo(l.contact.email); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
     setHistory(getHistory(id as string));
-    if (window.location.hash === "#outreach") {
-      setTimeout(() => document.getElementById("outreach")?.scrollIntoView({ behavior: "smooth" }), 600);
-    }
   }, [id]);
 
   useEffect(() => {
     if (!id) return;
-    setOutreach(null);
-    setDraft("");
+    setOutreach(null); setDraft("");
     setOutreachLoading(true);
     api.generateOutreach(id as string, channel)
       .then(d => { setOutreach(d); setDraft(d.message); })
@@ -104,27 +111,44 @@ export default function LeadDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const addOutreachEntry = () => {
-    if (!id || !lead) return;
-    const entry: HistoryEntry = {
-      id: Date.now().toString(),
-      type: "outreach",
-      channel,
-      contact: lead.contact?.name || undefined,
-      status: outreachStatus,
-      date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
-    };
-    const updated = [entry, ...history];
-    setHistory(updated);
-    saveHistory(id as string, updated);
+  const handleSendEmail = async () => {
+    if (!lead || !emailTo || !draft) return;
+    setEmailSending(true);
+    setEmailError(null);
+    try {
+      const payload: SendEmailRequest = {
+        to_email: emailTo,
+        subject: outreach?.subject || `Perkenalan dari Bawana — ${lead.company.name}`,
+        message: draft,
+        company_name: lead.company.name,
+      };
+      await api.sendEmail(payload);
+      setEmailSent(true);
+      setShowEmailInput(false);
+      // Log to history
+      const entry: HistoryEntry = {
+        id: Date.now().toString(),
+        type: "outreach",
+        channel: "email",
+        contact: emailTo,
+        status: "sent",
+        date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
+      };
+      const updated = [entry, ...history];
+      setHistory(updated);
+      saveHistory(id as string, updated);
+      setTimeout(() => setEmailSent(false), 3000);
+    } catch (e: any) {
+      setEmailError(e.message);
+    } finally {
+      setEmailSending(false);
+    }
   };
 
   const addNote = () => {
     if (!id || !noteInput.trim()) return;
     const entry: HistoryEntry = {
-      id: Date.now().toString(),
-      type: "note",
-      note: noteInput.trim(),
+      id: Date.now().toString(), type: "note", note: noteInput.trim(),
       date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
     };
     const updated = [entry, ...history];
@@ -164,30 +188,23 @@ export default function LeadDetail() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
       <Sidebar active="dashboard" />
-
       <main style={{ flex: 1, background: "var(--canvas)", overflowY: "auto" }}>
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 28px 80px" }}>
 
           {/* Back */}
-          <button
-            onClick={() => router.push("/")}
-            className="fade-up"
-            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 28, background: "none", border: "none", color: "var(--text-2)", fontSize: 13, fontWeight: 500, padding: 0, cursor: "pointer", transition: "color 0.15s" }}
+          <button onClick={() => router.push("/")} className="fade-up"
+            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 28, background: "none", border: "none", color: "var(--text-2)", fontSize: 13, fontWeight: 500, padding: 0, cursor: "pointer" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            Kembali ke Today's 5
+            Kembali ke Today&apos;s Leads
           </button>
 
           {/* Header card */}
-          <div className="fade-up" style={{
-            background: "var(--sidebar-bg)", borderRadius: 16, padding: "28px 32px",
-            marginBottom: 20, position: "relative", overflow: "hidden",
-          }}>
+          <div className="fade-up" style={{ background: "var(--sidebar-bg)", borderRadius: 16, padding: "28px 32px", marginBottom: 20, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.06)" }} />
             <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.10)" }} />
-
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Lead Detail</div>
@@ -201,7 +218,6 @@ export default function LeadDetail() {
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>PRIORITY SCORE</span>
               </div>
             </div>
-
             <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
               {lead.company.website && (
                 <a href={lead.company.website} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", color: "#fff", fontSize: 13, fontWeight: 600, background: "transparent", textDecoration: "none" }}>
@@ -220,12 +236,7 @@ export default function LeadDetail() {
           <Section className="fade-up fade-up-1" title="⭐ Why This Company" subtitle="Alasan sistem memilih company ini hari ini">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {lead.score.reasoning.map((r, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "flex-start", gap: 14,
-                  padding: "12px 16px", borderRadius: 10,
-                  background: i === 0 ? "var(--accent-dim)" : "var(--canvas)",
-                  border: `1px solid ${i === 0 ? "rgba(29,142,222,0.2)" : "var(--border)"}`,
-                }}>
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 16px", borderRadius: 10, background: i === 0 ? "var(--accent-dim)" : "var(--canvas)", border: `1px solid ${i === 0 ? "rgba(29,142,222,0.2)" : "var(--border)"}` }}>
                   <div style={{ marginTop: 2, width: 6, height: 6, borderRadius: "50%", background: i === 0 ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
                   <span style={{ fontSize: 14, color: i === 0 ? "var(--accent-text)" : "var(--text)", lineHeight: 1.6, fontWeight: i === 0 ? 600 : 400 }}>{r}</span>
                 </div>
@@ -253,44 +264,30 @@ export default function LeadDetail() {
                       <LinkedInIcon /> Buka LinkedIn
                     </a>
                   )}
-                  {contact.email && (
-                    <a href={`mailto:${contact.email}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                      Kirim Email
-                    </a>
-                  )}
                 </div>
               </div>
             </Section>
           )}
 
           {/* Outreach Assistant */}
-          <Section
-            className="fade-up fade-up-4"
-            title="Outreach Assistant"
-            id="outreach"
+          <Section className="fade-up fade-up-4" title="Outreach Assistant" id="outreach"
             badge={<span style={{ fontSize: 11, background: "var(--canvas-2)", color: "var(--text-2)", padding: "2px 8px", borderRadius: 6, fontWeight: 600, marginLeft: 8 }}>AI-generated</span>}
           >
+            {/* Channel selector */}
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: 13, color: "var(--text-2)" }}>Channel:</span>
               {(["linkedin", "email", "whatsapp"] as const).map(ch => (
-                <button
-                  key={ch}
-                  onClick={() => setChannel(ch)}
-                  style={{
-                    padding: "5px 12px", borderRadius: 8,
-                    border: `1px solid ${channel === ch ? "var(--accent)" : "var(--border)"}`,
-                    background: channel === ch ? "var(--accent-dim)" : "transparent",
-                    color: channel === ch ? "var(--accent-text)" : "var(--text-2)",
-                    fontSize: 13, fontWeight: channel === ch ? 600 : 400,
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}
-                >
+                <button key={ch} onClick={() => setChannel(ch)} style={{
+                  padding: "5px 12px", borderRadius: 8,
+                  border: `1px solid ${channel === ch ? "var(--accent)" : "var(--border)"}`,
+                  background: channel === ch ? "var(--accent-dim)" : "transparent",
+                  color: channel === ch ? "var(--accent-text)" : "var(--text-2)",
+                  fontSize: 13, fontWeight: channel === ch ? 600 : 400, cursor: "pointer", transition: "all 0.15s",
+                }}>
                   {ch === "linkedin" ? "LinkedIn" : ch === "email" ? "Email" : "WhatsApp"}
                 </button>
               ))}
-              {channel === "linkedin" && (
-                <span style={{ fontSize: 11, color: "var(--accent-text)", fontWeight: 600 }}>✓ Recommended</span>
-              )}
+              {channel === "linkedin" && <span style={{ fontSize: 11, color: "var(--accent-text)", fontWeight: 600 }}>✓ Recommended</span>}
             </div>
 
             {outreach?.subject && (
@@ -306,17 +303,8 @@ export default function LeadDetail() {
                 ))}
               </div>
             ) : (
-              <textarea
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                style={{
-                  width: "100%", minHeight: 220, padding: 16,
-                  border: "1px solid var(--border)", borderRadius: 10,
-                  background: "var(--canvas)", color: "var(--text)",
-                  fontSize: 13, lineHeight: 1.7, resize: "vertical",
-                  outline: "none", fontFamily: "var(--font-body)",
-                  transition: "border-color 0.15s",
-                }}
+              <textarea value={draft} onChange={e => setDraft(e.target.value)}
+                style={{ width: "100%", minHeight: 220, padding: 16, border: "1px solid var(--border)", borderRadius: 10, background: "var(--canvas)", color: "var(--text)", fontSize: 13, lineHeight: 1.7, resize: "vertical", outline: "none", fontFamily: "var(--font-body)", transition: "border-color 0.15s" }}
                 onFocus={e => (e.target.style.borderColor = "var(--accent)")}
                 onBlur={e => (e.target.style.borderColor = "var(--border)")}
               />
@@ -330,48 +318,80 @@ export default function LeadDetail() {
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button
-                onClick={handleCopy}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "10px 20px", borderRadius: 8, border: "none",
-                  background: copied ? "var(--accent)" : "var(--text)",
-                  color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+              <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: copied ? "var(--accent)" : "var(--text)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
                 <CopyIcon /> {copied ? "Tersalin! ✓" : "Copy Message"}
               </button>
+
+              {/* LinkedIn button */}
               {contact?.linkedin_url && channel === "linkedin" && (
                 <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
                   <LinkedInIcon /> Buka LinkedIn
                 </a>
               )}
+
+              {/* Email button */}
+              {channel === "email" && (
+                <button onClick={() => setShowEmailInput(!showEmailInput)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: emailSent ? "#16a34a" : "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  <EmailIcon /> {emailSent ? "Terkirim! ✓" : "Kirim Email"}
+                </button>
+              )}
+
+              {/* WhatsApp button — only if contact has phone */}
+              {channel === "whatsapp" && contact?.phone && (
+                <a
+                  href={`https://wa.me/${contact.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(draft)}`}
+                  target="_blank" rel="noopener"
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+                >
+                  <WhatsAppIcon /> Kirim WhatsApp
+                </a>
+              )}
+              {channel === "whatsapp" && !contact?.phone && (
+                <span style={{ fontSize: 13, color: "var(--text-3)", alignSelf: "center", fontStyle: "italic" }}>
+                  Nomor HP tidak tersedia untuk lead ini
+                </span>
+              )}
             </div>
+
+            {/* Email input panel */}
+            {channel === "email" && showEmailInput && (
+              <div style={{ marginTop: 14, padding: 16, background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)", marginBottom: 4 }}>Kirim ke:</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 8 }}>Pisahkan dengan koma untuk multiple penerima</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={emailTo}
+                    onChange={e => setEmailTo(e.target.value)}
+                    placeholder="email1@co.com, email2@co.com"
+                    type="text"
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "#fff", fontSize: 13, color: "var(--text)", outline: "none", fontFamily: "var(--font-mono)" }}
+                  />
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={emailSending || !emailTo}
+                    style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: emailSending ? "var(--border)" : "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: emailSending ? "not-allowed" : "pointer", whiteSpace: "nowrap" as const }}
+                  >
+                    {emailSending ? "Mengirim..." : "Kirim →"}
+                  </button>
+                </div>
+                {emailError && <p style={{ fontSize: 12, color: "#ef4444", marginTop: 8 }}>⚠ {emailError}</p>}
+              </div>
+            )}
           </Section>
 
           {/* Outreach History */}
           <Section className="fade-up fade-up-5" title="Outreach History" subtitle={history.length > 0 ? `${history.length} outreach tercatat` : "Belum ada outreach"}>
-
-            {/* Timeline */}
             {history.length > 0 && (
               <div style={{ position: "relative", marginBottom: 20 }}>
                 <div style={{ position: "absolute", left: 11, top: 0, bottom: 0, width: 2, background: "var(--border)" }} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {history.map((entry) => (
                     <div key={entry.id} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-                      {/* Timeline dot */}
-                      <div style={{
-                        width: 24, height: 24, borderRadius: "50%", flexShrink: 0, zIndex: 1,
-                        background: entry.type === "note" ? "var(--canvas-2)" : (entry.status === "replied" ? "#dcfce7" : "var(--accent-dim)"),
-                        border: `2px solid ${entry.type === "note" ? "var(--border)" : (entry.status === "replied" ? "#16a34a" : "var(--accent)")}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
+                      <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, zIndex: 1, background: entry.type === "note" ? "var(--canvas-2)" : (entry.status === "replied" ? "#dcfce7" : "var(--accent-dim)"), border: `2px solid ${entry.type === "note" ? "var(--border)" : (entry.status === "replied" ? "#16a34a" : "var(--accent)")}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: entry.type === "note" ? "var(--text-3)" : (entry.status === "replied" ? "#16a34a" : "var(--accent)") }} />
                       </div>
-
-                      {/* Entry card */}
                       <div style={{ flex: 1, background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: entry.type === "note" ? 6 : 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -391,20 +411,11 @@ export default function LeadDetail() {
                             )}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            {entry.status && (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: STATUS_LABELS[entry.status].color }}>
-                                {STATUS_LABELS[entry.status].label}
-                              </span>
-                            )}
-                            <button
-                              onClick={() => deleteEntry(entry.id)}
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
-                            >×</button>
+                            {entry.status && <span style={{ fontSize: 11, fontWeight: 700, color: STATUS_LABELS[entry.status].color }}>{STATUS_LABELS[entry.status].label}</span>}
+                            <button onClick={() => deleteEntry(entry.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: 14, lineHeight: 1, padding: "0 2px" }}>×</button>
                           </div>
                         </div>
-                        {entry.note && (
-                          <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{entry.note}</p>
-                        )}
+                        {entry.note && <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{entry.note}</p>}
                       </div>
                     </div>
                   ))}
@@ -412,26 +423,14 @@ export default function LeadDetail() {
               </div>
             )}
 
-            {/* Add note */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" as const }}>Tambah Catatan</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  value={noteInput}
-                  onChange={e => setNoteInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addNote()}
+                <input value={noteInput} onChange={e => setNoteInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addNote()}
                   placeholder="Catatan tambahan selain outreach di atas"
-                  style={{
-                    flex: 1, padding: "10px 14px", borderRadius: 8,
-                    border: "1px solid var(--border)", background: "var(--canvas)",
-                    fontSize: 13, color: "var(--text)", outline: "none",
-                    fontFamily: "var(--font-body)",
-                  }}
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--canvas)", fontSize: 13, color: "var(--text)", outline: "none", fontFamily: "var(--font-body)" }}
                 />
-                <button
-                  onClick={addNote}
-                  style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--text)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-                >
+                <button onClick={addNote} style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--text)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                   + Tambah
                 </button>
               </div>

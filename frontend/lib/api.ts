@@ -58,6 +58,20 @@ export interface ICPConfig {
   target_roles: string[];
 }
 
+export interface SendEmailRequest {
+  to_email: string;
+  subject: string;
+  message: string;
+  company_name: string;
+}
+
+export interface SendEmailResponse {
+  success: boolean;
+  message: string;
+  sent_to: string[];
+  failed: string[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -87,6 +101,12 @@ export const api = {
     request<OutreachDraft>("/outreach/generate", {
       method: "POST",
       body: JSON.stringify({ company_id: companyId, channel }),
+    }),
+
+  sendEmail: (data: SendEmailRequest) =>
+    request<SendEmailResponse>("/outreach/send-email", {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 
   getICP: () => request<ICPConfig>("/settings/icp"),

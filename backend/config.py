@@ -3,8 +3,14 @@ import os
 
 load_dotenv()
 
-APOLLO_API_KEY = os.getenv("APOLLO_API_KEY")
+APOLLO_API_KEY_ORG    = os.getenv("APOLLO_API_KEY")        # organizations/search
+APOLLO_API_KEY_MIXED  = os.getenv("APOLLO_MIXED_KEY")      # mixed_companies + mixed_people
+APOLLO_API_KEY_PEOPLE = os.getenv("APOLLO_PEOPLE_KEY")     # people/search
+APOLLO_API_KEY_ENRICH = os.getenv("APOLLO_ENRICH_KEY")     # people/match enrichment
+APOLLO_API_KEY = APOLLO_API_KEY_ORG  # backward compat
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GMAIL_USER         = os.getenv("GMAIL_USER")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 DATABASE_URL = os.getenv("DATABASE_URL", "./sales_radar.db")
 
 # Set DUMMY_MODE=true in .env to skip Apollo and use local dummy data
