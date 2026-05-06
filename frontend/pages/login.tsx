@@ -93,7 +93,6 @@ export default function Login() {
             width: "100%",
             padding: "13px 16px",
             borderRadius: 10,
-            border: "none",
             background: error ? "#fef2f2" : "#f0f3f7",
             fontSize: 15,
             color: "#0D2137",
