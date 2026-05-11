@@ -138,10 +138,14 @@ async def get_lead_detail(
         raise HTTPException(status_code=404, detail="Lead not found")
 
     icp = await _get_active_icp(session)
-    contacts = await resolve_contact(company_id, icp.target_roles, icp.keywords)
+    contacts = await resolve_contact(company_id, icp.target_roles)
     from services.scoring import _score_company
     score = _score_company(company, icp)
-    return Lead(company=company, score=score, contacts=contacts, fetched_at=datetime.utcnow())
+    lead = Lead(company=company, score=score, contacts=contacts, fetched_at=datetime.utcnow())
+    # Save to DB so outreach generation can find it
+    await _upsert_lead(session, lead)
+    await session.commit()
+    return lead
 
 
 async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> List[Lead]:
@@ -160,7 +164,7 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
             dummy = get_dummy_contact(company.id)
             contacts = [dummy] if dummy else []
         else:
-            contacts = await resolve_contact(company.id, icp.target_roles, icp.keywords)
+            contacts = await resolve_contact(company.id, icp.target_roles)
         leads.append(Lead(
             company=company,
             score=score,
