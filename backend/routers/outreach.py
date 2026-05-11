@@ -112,7 +112,7 @@ async def send_email(request: SendEmailRequest):
                 )
                 sent_to.append(recipient)
             except Exception as e:
-                failed.append(f"{recipient} ({str(e)[:50)})")
+                failed.append(f"{recipient} ({str(e)[:50]})")
 
     if not sent_to:
         raise HTTPException(status_code=500, detail=f"Semua email gagal terkirim: {', '.join(failed)}")
