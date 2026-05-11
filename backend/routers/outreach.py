@@ -34,19 +34,11 @@ async def generate_outreach(
         employee_count=record.employee_count, description=record.description,
         website=record.website, linkedin_url=record.linkedin_url, location=record.location,
     )
-    # Use selected contact from request if provided (user picked a specific contact)
-    if request.contact_name:
-        contact = Contact(name=request.contact_name, role=request.contact_role)
-    elif record.contacts:
-        contact = Contact(**record.contacts[0])
-    elif record.contact_name:
-        contact = Contact(
-            name=record.contact_name, role=record.contact_role,
-            linkedin_url=record.contact_linkedin, email=record.contact_email,
-            phone=record.contact_phone,
-        )
-    else:
-        contact = None
+    contact = Contact(
+        name=record.contact_name, role=record.contact_role,
+        linkedin_url=record.contact_linkedin, email=record.contact_email,
+        phone=record.contact_phone,
+    ) if record.contact_name else None
     score = LeadScore(
         total=record.score,
         breakdown=record.score_breakdown or {},
@@ -99,27 +91,28 @@ async def send_email(request: SendEmailRequest):
     sent_to = []
     failed = []
 
-    for recipient in recipients:
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = request.subject or f"Perkenalan dari Bawana — {request.company_name}"
-            msg["From"] = f"Anna Savira <{GMAIL_USER}>"
-            msg["To"] = recipient
-            msg.attach(MIMEText(request.message, "plain", "utf-8"))
-            msg.attach(MIMEText(html_content, "html", "utf-8"))
+    async with httpx.AsyncClient(timeout=30) as _:
+        for recipient in recipients:
+            try:
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = request.subject or f"Perkenalan dari Bawana — {request.company_name}"
+                msg["From"] = f"Anna Savira <{GMAIL_USER}>"
+                msg["To"] = recipient
+                msg.attach(MIMEText(request.message, "plain", "utf-8"))
+                msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-            await aiosmtplib.send(
-                msg,
-                hostname="smtp.gmail.com",
-                port=587,
-                start_tls=True,
-                username=GMAIL_USER,
-                password=GMAIL_APP_PASSWORD,
-                tls_context=ssl_context,
-            )
-            sent_to.append(recipient)
-        except Exception as e:
-            failed.append(f"{recipient} ({str(e)[:50]})")
+                await aiosmtplib.send(
+                    msg,
+                    hostname="smtp.gmail.com",
+                    port=465,
+                    use_tls=True,
+                    username=GMAIL_USER,
+                    password=GMAIL_APP_PASSWORD,
+                    tls_context=ssl_context,
+                )
+                sent_to.append(recipient)
+            except Exception as e:
+                failed.append(f"{recipient} ({str(e)[:50)})")
 
     if not sent_to:
         raise HTTPException(status_code=500, detail=f"Semua email gagal terkirim: {', '.join(failed)}")
