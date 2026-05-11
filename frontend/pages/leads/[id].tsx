@@ -81,6 +81,9 @@ export default function LeadDetail() {
   const [emailTo, setEmailTo] = useState("");
   const [showEmailInput, setShowEmailInput] = useState(false);
 
+  // Selected contact index (for multi-contact support)
+  const [selectedContactIdx, setSelectedContactIdx] = useState(0);
+
   // Outreach History
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [noteInput, setNoteInput] = useState("");
@@ -88,21 +91,22 @@ export default function LeadDetail() {
   useEffect(() => {
     if (!id) return;
     api.getLeadDetail(id as string)
-      .then(l => { setLead(l); if (l.contact?.email) setEmailTo(l.contact.email); })
+      .then(l => { setLead(l); if (l.contacts?.[0]?.email) setEmailTo(l.contacts[0].email ?? ""); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
     setHistory(getHistory(id as string));
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !lead) return;
+    const selected = lead.contacts?.[selectedContactIdx] ?? lead.contacts?.[0];
     setOutreach(null); setDraft("");
     setOutreachLoading(true);
-    api.generateOutreach(id as string, channel)
+    api.generateOutreach(id as string, channel, selected?.name ?? undefined, selected?.role ?? undefined)
       .then(d => { setOutreach(d); setDraft(d.message); })
       .catch((e: any) => setError(e.message))
       .finally(() => setOutreachLoading(false));
-  }, [id, channel]);
+  }, [id, channel, selectedContactIdx, lead]);
 
   const handleCopy = () => {
     const text = outreach?.subject ? `Subject: ${outreach.subject}\n\n${draft}` : draft;
@@ -118,7 +122,7 @@ export default function LeadDetail() {
     try {
       const payload: SendEmailRequest = {
         to_email: emailTo,
-        subject: outreach?.subject || `Perkenalan dari Bawana — ${lead.company.name}`,
+        subject: outreach?.subject || `Perkenalan dari Bawana - ${lead.company.name}`,
         message: draft,
         company_name: lead.company.name,
       };
@@ -183,7 +187,8 @@ export default function LeadDetail() {
   if (!lead) return null;
 
   const score = Math.round(lead.score.total);
-  const contact = lead.contact;
+  const contacts = lead.contacts ?? [];
+  const contact = contacts[selectedContactIdx] ?? contacts[0] ?? null;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
@@ -244,27 +249,63 @@ export default function LeadDetail() {
             </div>
           </Section>
 
-          {/* Contact Person */}
-          {contact && (
-            <Section className="fade-up fade-up-3" title="Contact Person">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--canvas-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "var(--text-2)" }}>
-                    {(contact.name || "?").split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{contact.name}</div>
-                    <div style={{ fontSize: 13, color: "var(--text-2)", marginTop: 2 }}>{contact.role}</div>
-                    {contact.email && <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{contact.email}</div>}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {contact.linkedin_url && (
-                    <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                      <LinkedInIcon /> Buka LinkedIn
-                    </a>
-                  )}
-                </div>
+          {/* Contact Persons */}
+          {contacts.length > 0 && (
+            <Section className="fade-up fade-up-3"
+              title={`Contact Person${contacts.length > 1 ? ` (${contacts.length} ditemukan)` : ""}`}
+              subtitle={contacts.length > 1 ? "Pilih contact yang akan digunakan untuk outreach" : undefined}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {contacts.map((c, idx) => {
+                  const isSelected = idx === selectedContactIdx;
+                  const initials = (c.name || "?").split(" ").slice(0, 2).map((n: string) => n[0]).join("").toUpperCase();
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => { setSelectedContactIdx(idx); if (c.email) setEmailTo(c.email); }}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        flexWrap: "wrap", gap: 12, padding: "12px 14px", borderRadius: 10,
+                        border: `1.5px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
+                        background: isSelected ? "var(--accent-dim)" : "var(--canvas)",
+                        cursor: contacts.length > 1 ? "pointer" : "default",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: isSelected ? "var(--accent)" : "var(--canvas-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: isSelected ? "#fff" : "var(--text-2)", flexShrink: 0 }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
+                            {c.name || "-"}
+                            {isSelected && contacts.length > 1 && (
+                              <span style={{ marginLeft: 8, fontSize: 10, background: "var(--accent)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, verticalAlign: "middle" }}>
+                                DIPILIH
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>{c.role || "-"}</div>
+                          {/* Data availability badges */}
+                          <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+                            <DataBadge label="LinkedIn" available={!!c.linkedin_url} />
+                            <DataBadge label="Email" available={!!c.email} value={c.email} />
+                            <DataBadge label="Phone" available={!!c.phone} value={c.phone} />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        {c.linkedin_url && (
+                          <a href={c.linkedin_url} target="_blank" rel="noopener"
+                            onClick={e => e.stopPropagation()}
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
+                            <LinkedInIcon /> LinkedIn
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Section>
           )}
@@ -338,19 +379,19 @@ export default function LeadDetail() {
                 </button>
               )}
 
-              {/* WhatsApp button — only if contact has phone */}
+              {/* WhatsApp button - only if selected contact has phone */}
               {channel === "whatsapp" && contact?.phone && (
                 <a
                   href={`https://wa.me/${contact.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(draft)}`}
                   target="_blank" rel="noopener"
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
                 >
-                  <WhatsAppIcon /> Kirim WhatsApp
+                  <WhatsAppIcon /> Kirim WhatsApp {contacts.length > 1 ? `ke ${contact.name?.split(" ")[0]}` : ""}
                 </a>
               )}
               {channel === "whatsapp" && !contact?.phone && (
                 <span style={{ fontSize: 13, color: "var(--text-3)", alignSelf: "center", fontStyle: "italic" }}>
-                  Nomor HP tidak tersedia untuk lead ini
+                  {contacts.length > 1 ? "Contact yang dipilih tidak memiliki nomor HP" : "Nomor HP tidak tersedia untuk lead ini"}
                 </span>
               )}
             </div>
@@ -458,6 +499,23 @@ function Section({ title, subtitle, badge, children, className, id }: {
       </div>
       {children}
     </div>
+  );
+}
+
+function DataBadge({ label, available, value }: { label: string; available: boolean; value?: string | null }) {
+  return (
+    <span
+      title={available && value ? value : undefined}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3,
+        fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5,
+        background: available ? "#dcfce7" : "var(--canvas-2)",
+        color: available ? "#16a34a" : "var(--text-3)",
+        border: `1px solid ${available ? "#bbf7d0" : "var(--border)"}`,
+      }}
+    >
+      {available ? "✓" : "✕"} {label}
+    </span>
   );
 }
 

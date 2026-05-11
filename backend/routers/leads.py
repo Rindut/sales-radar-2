@@ -138,10 +138,10 @@ async def get_lead_detail(
         raise HTTPException(status_code=404, detail="Lead not found")
 
     icp = await _get_active_icp(session)
-    contact = await resolve_contact(company_id, icp.target_roles)
+    contacts = await resolve_contact(company_id, icp.target_roles, icp.keywords)
     from services.scoring import _score_company
     score = _score_company(company, icp)
-    return Lead(company=company, score=score, contact=contact, fetched_at=datetime.utcnow())
+    return Lead(company=company, score=score, contacts=contacts, fetched_at=datetime.utcnow())
 
 
 async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> List[Lead]:
@@ -156,17 +156,22 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
 
     leads = []
     for company, score in top_scored:
-        contact = get_dummy_contact(company.id) if (DUMMY_MODE and get_dummy_contact) else await resolve_contact(company.id, icp.target_roles)
+        if DUMMY_MODE and get_dummy_contact:
+            dummy = get_dummy_contact(company.id)
+            contacts = [dummy] if dummy else []
+        else:
+            contacts = await resolve_contact(company.id, icp.target_roles, icp.keywords)
         leads.append(Lead(
             company=company,
             score=score,
-            contact=contact,
+            contacts=contacts,
             fetched_at=datetime.utcnow(),
         ))
     return leads
 
 
 async def _upsert_lead(session: AsyncSession, lead: Lead):
+    contacts_json = [c.dict() for c in lead.contacts]
     existing = await session.get(LeadRecord, lead.company.id)
     if existing:
         existing.score = lead.score.total
@@ -175,9 +180,18 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
         existing.keywords = getattr(lead.company, 'keywords', [])
         existing.founded_year = getattr(lead.company, 'founded_year', None)
         existing.revenue = getattr(lead.company, 'revenue', None)
+        existing.contacts = contacts_json
+        # Also update legacy columns to first contact for backward compat
+        top = lead.contacts[0] if lead.contacts else None
+        existing.contact_name = top.name if top else None
+        existing.contact_role = top.role if top else None
+        existing.contact_linkedin = top.linkedin_url if top else None
+        existing.contact_email = top.email if top else None
+        existing.contact_phone = top.phone if top else None
         existing.fetched_at = lead.fetched_at
         # Never reset is_rejected on upsert
     else:
+        top = lead.contacts[0] if lead.contacts else None
         record = LeadRecord(
             id=lead.company.id,
             name=lead.company.name,
@@ -193,11 +207,12 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
             score=lead.score.total,
             score_breakdown=lead.score.breakdown,
             reasoning=lead.score.reasoning,
-            contact_name=lead.contact.name if lead.contact else None,
-            contact_role=lead.contact.role if lead.contact else None,
-            contact_linkedin=lead.contact.linkedin_url if lead.contact else None,
-            contact_email=lead.contact.email if lead.contact else None,
-            contact_phone=lead.contact.phone if lead.contact else None,
+            contacts=contacts_json,
+            contact_name=top.name if top else None,
+            contact_role=top.role if top else None,
+            contact_linkedin=top.linkedin_url if top else None,
+            contact_email=top.email if top else None,
+            contact_phone=top.phone if top else None,
             fetched_at=lead.fetched_at,
             is_rejected=False,
         )
@@ -205,6 +220,20 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
 
 
 def _record_to_lead(r: LeadRecord) -> Lead:
+    # Use new contacts JSON column if available, else fall back to legacy columns
+    if r.contacts:
+        contacts = [Contact(**c) for c in r.contacts]
+    elif r.contact_name:
+        contacts = [Contact(
+            name=r.contact_name,
+            role=r.contact_role,
+            linkedin_url=r.contact_linkedin,
+            email=r.contact_email,
+            phone=r.contact_phone,
+        )]
+    else:
+        contacts = []
+
     return Lead(
         company=Company(
             id=r.id,
@@ -224,13 +253,7 @@ def _record_to_lead(r: LeadRecord) -> Lead:
             breakdown=r.score_breakdown or {},
             reasoning=r.reasoning or [],
         ),
-        contact=Contact(
-            name=r.contact_name,
-            role=r.contact_role,
-            linkedin_url=r.contact_linkedin,
-            email=r.contact_email,
-            phone=r.contact_phone,
-        ) if r.contact_name else None,
+        contacts=contacts,
         fetched_at=r.fetched_at,
         is_rejected=r.is_rejected or False,
     )

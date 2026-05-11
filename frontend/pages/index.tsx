@@ -4,9 +4,9 @@ import { api, DashboardResponse, Lead } from "../lib/api";
 import Sidebar from "../components/Sidebar";
 
 function scoreBadgeStyle(score: number): { color: string; background: string } {
-  if (score >= 85) return { color: "#1D8EDE", background: "#ddf0fc" };
+  if (score >= 85) return { color: "#16a34a", background: "#dcfce7" };
   if (score >= 70) return { color: "#F5A623", background: "#FFF3DC" };
-  return { color: "#7aaecb", background: "#EBF5FD" };
+  return { color: "#aaa", background: "#f3f4f6" };
 }
 
 function ScoreBadge({ score, size = "md" }: { score: number; size?: "sm" | "md" | "lg" }) {
@@ -41,7 +41,7 @@ export default function Dashboard() {
       refresh ? setRefreshing(true) : setLoading(true);
       const result = await api.getTopLeads(refresh);
       setData(result);
-      // Sync skipped state from DB — source of truth is backend
+      // Sync skipped state from DB - source of truth is backend
       const skippedIds = new Set(
         result.leads.filter(l => l.is_rejected).map(l => l.company.id)
       );
@@ -144,7 +144,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Active leads — 2-column grid */}
+          {/* Active leads - 2-column grid */}
           {!loading && activeLeads.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 40 }}>
               {activeLeads.map((lead) => (
@@ -197,7 +197,7 @@ function LeadCard({ lead, isSkipped, onToggleSkip, onOutreach }: {
 }) {
   const [hovered, setHovered] = useState(false);
   const score = Math.round(lead.score.total);
-  const contact = lead.contact;
+  const contact = lead.contacts?.[0];
 
   return (
     <div
@@ -255,34 +255,43 @@ function LeadCard({ lead, isSkipped, onToggleSkip, onOutreach }: {
             ))}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          {/* Contact row - fixed height, no wrapping */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 32, marginBottom: 10 }}>
             {contact ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <>
                 <div style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--canvas-2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: "var(--text-2)", flexShrink: 0 }}>
                   {getInitials(contact.name)}
                 </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{contact.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-3)" }}>{contact.role}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{contact.name}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {contact.role}
+                    {lead.contacts.length > 1 && (
+                      <span style={{ marginLeft: 6, background: "var(--accent-dim)", color: "var(--accent-text)", padding: "1px 5px", borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
+                        +{lead.contacts.length - 1} contacts
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : (
               <span style={{ fontSize: 12, color: "var(--text-3)" }}>Belum ada kontak</span>
             )}
-
-            <button
-              onClick={e => { e.stopPropagation(); onOutreach(); }}
-              style={{
-                padding: "7px 14px", borderRadius: 8, border: "none",
-                background: "var(--accent)", color: "#fff",
-                fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
-              }}
-              onMouseEnter={e => { (e.target as HTMLButtonElement).style.background = "#0a6aad"; }}
-              onMouseLeave={e => { (e.target as HTMLButtonElement).style.background = "var(--accent)"; }}
-            >
-              Start Outreach →
-            </button>
           </div>
+
+          {/* Button - always pinned to bottom, full width */}
+          <button
+            onClick={e => { e.stopPropagation(); onOutreach(); }}
+            style={{
+              width: "100%", padding: "9px 0", borderRadius: 8, border: "none",
+              background: "var(--accent)", color: "#fff",
+              fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "background 0.15s",
+            }}
+            onMouseEnter={e => { (e.currentTarget.style.background = "#0a6aad"); }}
+            onMouseLeave={e => { (e.currentTarget.style.background = "var(--accent)"); }}
+          >
+            Start Outreach →
+          </button>
         </div>
       </div>
     </div>
@@ -295,7 +304,7 @@ function SkippedRow({ lead, onUnskip, onOutreach }: {
   onOutreach: () => void;
 }) {
   const score = Math.round(lead.score.total);
-  const contact = lead.contact;
+  const contact = lead.contacts?.[0];
 
   return (
     <div

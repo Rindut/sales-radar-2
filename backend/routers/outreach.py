@@ -34,11 +34,19 @@ async def generate_outreach(
         employee_count=record.employee_count, description=record.description,
         website=record.website, linkedin_url=record.linkedin_url, location=record.location,
     )
-    contact = Contact(
-        name=record.contact_name, role=record.contact_role,
-        linkedin_url=record.contact_linkedin, email=record.contact_email,
-        phone=record.contact_phone,
-    ) if record.contact_name else None
+    # Use selected contact from request if provided (user picked a specific contact)
+    if request.contact_name:
+        contact = Contact(name=request.contact_name, role=request.contact_role)
+    elif record.contacts:
+        contact = Contact(**record.contacts[0])
+    elif record.contact_name:
+        contact = Contact(
+            name=record.contact_name, role=record.contact_role,
+            linkedin_url=record.contact_linkedin, email=record.contact_email,
+            phone=record.contact_phone,
+        )
+    else:
+        contact = None
     score = LeadScore(
         total=record.score,
         breakdown=record.score_breakdown or {},

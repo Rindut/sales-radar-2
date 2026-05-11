@@ -143,7 +143,7 @@ export default function Settings() {
             <Section className="fade-up fade-up-2" title="ICP Configuration" subtitle="Ideal Customer Profile yang kamu targetkan">
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-                {/* Industry — Apollo dropdown */}
+                {/* Industry - Apollo dropdown */}
                 <DropdownTagField
                   label="Target Industri"
                   hint="Pilih dari daftar industri Apollo"
@@ -153,7 +153,7 @@ export default function Settings() {
                   onAdd={v => setConfig({ ...config, industries: config.industries.includes(v) ? config.industries : [...config.industries, v] })}
                 />
 
-                {/* Location — free text */}
+                {/* Location - free text */}
                 <TagField
                   label="Target Lokasi"
                   hint="contoh: Indonesia, Jakarta"
@@ -162,7 +162,7 @@ export default function Settings() {
                   onAdd={v => setConfig({ ...config, locations: config.locations.includes(v) ? config.locations : [...config.locations, v] })}
                 />
 
-                {/* Keywords — Apollo dropdown + custom */}
+                {/* Keywords - Apollo dropdown + custom */}
                 <DropdownTagField
                   label="Keywords"
                   hint="Pilih atau ketik keyword Apollo"
@@ -173,7 +173,7 @@ export default function Settings() {
                   onAdd={v => setConfig({ ...config, keywords: config.keywords.includes(v) ? config.keywords : [...config.keywords, v] })}
                 />
 
-                {/* Target roles — free text */}
+                {/* Target roles - free text */}
                 <TagField
                   label="Target Jabatan"
                   hint="contoh: Head of Learning, HR Director"
@@ -204,13 +204,13 @@ export default function Settings() {
             {[
               { label: "Apollo API", status: "OK", ping: "120ms" },
               { label: "AI Scoring Engine", status: "OK", ping: "280ms" },
-              { label: "Database", status: "OK", ping: "—" },
-              { label: "Last Refresh", status: "07:30 WIB", ping: "—" },
+              { label: "Database", status: "OK", ping: "-" },
+              { label: "Last Refresh", status: "07:30 WIB", ping: "-" },
             ].map(s => (
               <div key={s.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                 <span style={{ fontSize: 13, color: "var(--text-2)" }}>{s.label}</span>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  {s.ping !== "—" && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>{s.ping}</span>}
+                  {s.ping !== "-" && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>{s.ping}</span>}
                   <span style={{ fontSize: 12, fontWeight: 600, color: s.status === "OK" ? "var(--accent-text)" : "var(--text-2)" }}>{s.status}</span>
                 </div>
               </div>
@@ -235,7 +235,7 @@ export default function Settings() {
   );
 }
 
-// Searchable dropdown tag field — for Apollo-defined lists
+// Searchable dropdown tag field - for Apollo-defined lists
 function DropdownTagField({ label, hint, tags, options, onRemove, onAdd, allowCustom }: {
   label: string; hint: string; tags: string[]; options: string[];
   onRemove: (v: string) => void; onAdd: (v: string) => void;
@@ -305,7 +305,7 @@ function DropdownTagField({ label, hint, tags, options, onRemove, onAdd, allowCu
             ))}
             {filtered.length > 8 && (
               <div style={{ padding: "8px 14px", fontSize: 12, color: "var(--text-3)" }}>
-                +{filtered.length - 8} lainnya — ketik untuk filter
+                +{filtered.length - 8} lainnya - ketik untuk filter
               </div>
             )}
           </div>
@@ -315,7 +315,7 @@ function DropdownTagField({ label, hint, tags, options, onRemove, onAdd, allowCu
   );
 }
 
-// Free-text tag input — for locations, roles
+// Free-text tag input - for locations, roles
 function TagField({ label, hint, tags, onRemove, onAdd }: {
   label: string; hint: string; tags: string[];
   onRemove: (v: string) => void; onAdd: (v: string) => void;

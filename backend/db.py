@@ -28,12 +28,15 @@ class LeadRecord(Base):
     score = Column(Float)
     score_breakdown = Column(JSON)
     reasoning = Column(JSON)
+    # Legacy single-contact columns — kept for backward compat, no longer written
     contact_name = Column(String, nullable=True)
     contact_role = Column(String, nullable=True)
     contact_linkedin = Column(String, nullable=True)
     contact_email = Column(String, nullable=True)
     contact_phone = Column(String, nullable=True)
-    is_rejected = Column(Boolean, default=False)   # NEW — Opsi C
+    # New: stores all contacts as JSON list
+    contacts = Column(JSON, default=list)
+    is_rejected = Column(Boolean, default=False)
     fetched_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -45,9 +48,22 @@ class ICPRecord(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 
+async def _migrate(conn):
+    """Add contacts column if it doesn't exist (safe to run on every startup)."""
+    try:
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE leads ADD COLUMN contacts TEXT"
+            )
+        )
+    except Exception:
+        pass  # column already exists
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _migrate(conn)
 
 
 async def get_session():

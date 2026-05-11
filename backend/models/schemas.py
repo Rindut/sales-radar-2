@@ -34,14 +34,16 @@ class Company(BaseModel):
 class Lead(BaseModel):
     company: Company
     score: LeadScore
-    contact: Optional[Contact] = None
+    contacts: List[Contact] = Field(default_factory=list)
     fetched_at: Optional[datetime] = None
-    is_rejected: bool = False          # NEW
+    is_rejected: bool = False
 
 
 class OutreachRequest(BaseModel):
     company_id: str
     channel: str = "linkedin"
+    contact_name: Optional[str] = None   # override: use selected contact's name
+    contact_role: Optional[str] = None   # override: use selected contact's role
 
 
 class OutreachDraft(BaseModel):

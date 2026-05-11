@@ -31,7 +31,7 @@ export interface Company {
 export interface Lead {
   company: Company;
   score: LeadScore;
-  contact?: Contact;
+  contacts: Contact[];
   fetched_at?: string;
   is_rejected?: boolean;
 }
@@ -97,10 +97,15 @@ export const api = {
   unskipLead: (companyId: string) =>
     request<{ status: string }>(`/leads/unreject/${companyId}`, { method: "POST" }),
 
-  generateOutreach: (companyId: string, channel: string) =>
+  generateOutreach: (companyId: string, channel: string, contactName?: string, contactRole?: string) =>
     request<OutreachDraft>("/outreach/generate", {
       method: "POST",
-      body: JSON.stringify({ company_id: companyId, channel }),
+      body: JSON.stringify({
+        company_id: companyId,
+        channel,
+        contact_name: contactName || undefined,
+        contact_role: contactRole || undefined,
+      }),
     }),
 
   sendEmail: (data: SendEmailRequest) =>

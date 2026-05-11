@@ -8,8 +8,9 @@ export default function Sidebar({ active }: { active: Page }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const nav: { id: Page; label: string; href: string; badge?: string; icon: JSX.Element }[] = [
-    { id: "dashboard", label: "Leads",    href: "/",         badge: "10", icon: <TargetIcon /> },
-    { id: "settings",  label: "Settings", href: "/settings",              icon: <SettingsIcon /> },
+    { id: "dashboard", label: "Leads",    href: "/",          badge: "10", icon: <TargetIcon /> },
+    { id: "settings",  label: "Settings", href: "/settings",               icon: <SettingsIcon /> },
+    { id: "playbook",  label: "Playbook", href: "/playbook",               icon: <PlaybookIcon /> },
   ];
 
   return (
@@ -103,6 +104,9 @@ export default function Sidebar({ active }: { active: Page }) {
 
 function TargetIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>;
+}
+function PlaybookIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1.5" width="9" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M5 5h4M5 7.5h4M5 10h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11.5 4.5L13.5 8l-2 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 function SettingsIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="currentColor" strokeWidth="1.5"/><path d="M12.5 8c0-.3-.03-.6-.07-.88l1.56-1.22-1.5-2.6-1.87.75A4.98 4.98 0 0 0 9 3.55V1.5H7v2.05c-.58.17-1.11.44-1.57.78L3.56 3.6l-1.5 2.6 1.56 1.22C3.53 7.4 3.5 7.7 3.5 8c0 .3.03.6.07.88L2 10.1l1.5 2.6 1.87-.75c.46.34.99.61 1.57.78v2.05h2v-2.05c.58-.17 1.11-.44 1.57-.78l1.87.75 1.5-2.6-1.56-1.22c.05-.28.07-.58.07-.88Z" stroke="currentColor" strokeWidth="1.3"/></svg>;
