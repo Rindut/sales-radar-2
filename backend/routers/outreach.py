@@ -2,9 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-import aiosmtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 import os
 
 from db import get_session, LeadRecord
@@ -13,8 +11,9 @@ from services.ai_outreach import generate_outreach_draft
 
 router = APIRouter(prefix="/outreach", tags=["outreach"])
 
-GMAIL_USER = os.getenv("GMAIL_USER", "")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+SENDER_EMAIL   = os.getenv("GMAIL_USER", "anna.savira@bawana.com")
+SENDER_NAME    = "Anna Savira"
 
 
 @router.post("/generate", response_model=OutreachDraft)
@@ -34,11 +33,18 @@ async def generate_outreach(
         employee_count=record.employee_count, description=record.description,
         website=record.website, linkedin_url=record.linkedin_url, location=record.location,
     )
-    contact = Contact(
-        name=record.contact_name, role=record.contact_role,
-        linkedin_url=record.contact_linkedin, email=record.contact_email,
-        phone=record.contact_phone,
-    ) if record.contact_name else None
+    # Use contacts JSON column if available, else fall back to legacy columns
+    if record.contacts:
+        contact = Contact(**record.contacts[0])
+    elif record.contact_name:
+        contact = Contact(
+            name=record.contact_name, role=record.contact_role,
+            linkedin_url=record.contact_linkedin, email=record.contact_email,
+            phone=record.contact_phone,
+        )
+    else:
+        contact = None
+
     score = LeadScore(
         total=record.score,
         breakdown=record.score_breakdown or {},
@@ -49,7 +55,7 @@ async def generate_outreach(
 
 
 class SendEmailRequest(BaseModel):
-    to_email: str  # comma-separated emails
+    to_email: str   # comma-separated
     subject: str
     message: str
     company_name: str
@@ -64,20 +70,17 @@ class SendEmailResponse(BaseModel):
 
 @router.post("/send-email", response_model=SendEmailResponse)
 async def send_email(request: SendEmailRequest):
-    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
-        raise HTTPException(status_code=500, detail="Gmail credentials not configured.")
+    if not RESEND_API_KEY:
+        raise HTTPException(status_code=500, detail="RESEND_API_KEY not configured.")
 
-    # Parse multiple emails
     recipients = [e.strip() for e in request.to_email.split(",") if e.strip() and "@" in e.strip()]
     if not recipients:
         raise HTTPException(status_code=400, detail="Tidak ada email valid yang ditemukan.")
 
-    import ssl, certifi
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-
     html_body = request.message.replace("\n", "<br>")
     html_content = f"""
-    <html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;
+        line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
         {html_body}
         <br><br>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
@@ -91,27 +94,30 @@ async def send_email(request: SendEmailRequest):
     sent_to = []
     failed = []
 
-    for recipient in recipients:
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = request.subject or f"Perkenalan dari Bawana — {request.company_name}"
-            msg["From"] = f"Anna Savira <{GMAIL_USER}>"
-            msg["To"] = recipient
-            msg.attach(MIMEText(request.message, "plain", "utf-8"))
-            msg.attach(MIMEText(html_content, "html", "utf-8"))
-
-            await aiosmtplib.send(
-                msg,
-                hostname="smtp.gmail.com",
-                port=587,
-                start_tls=True,
-                username=GMAIL_USER,
-                password=GMAIL_APP_PASSWORD,
-                tls_context=ssl_context,
-            )
-            sent_to.append(recipient)
-        except Exception as e:
-            failed.append(f"{recipient} ({str(e)[:50]})")
+    async with httpx.AsyncClient(timeout=15) as client:
+        for recipient in recipients:
+            try:
+                resp = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={
+                        "Authorization": f"Bearer {RESEND_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "from": f"{SENDER_NAME} <{SENDER_EMAIL}>",
+                        "to": [recipient],
+                        "subject": request.subject or f"Perkenalan dari Bawana — {request.company_name}",
+                        "html": html_content,
+                        "text": request.message,
+                    },
+                )
+                if resp.status_code in (200, 201):
+                    sent_to.append(recipient)
+                else:
+                    err = resp.json().get("message", resp.text[:80])
+                    failed.append(f"{recipient} ({err})")
+            except Exception as e:
+                failed.append(f"{recipient} ({str(e)[:60]})")
 
     if not sent_to:
         raise HTTPException(status_code=500, detail=f"Semua email gagal terkirim: {', '.join(failed)}")

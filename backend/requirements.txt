@@ -8,3 +8,4 @@ sqlalchemy==2.0.40
 aiosqlite==0.21.0
 aiosmtplib==3.0.1
 certifi>=2024.1.1
+# Note: email sending now uses Resend API (httpx) instead of SMTP
