@@ -80,14 +80,8 @@ async def send_email(request: SendEmailRequest):
     html_body = request.message.replace("\n", "<br>")
     html_content = f"""
     <html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;
-        line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+        line-height: 1.6; margin: 0; padding: 0; text-align: left;">
         {html_body}
-        <br><br>
-        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-        <p style="font-size: 12px; color: #999;">
-            Email ini dikirim melalui Sales Radar by Bawana.<br>
-            <a href="https://bawana.id" style="color: #1D8EDE;">bawana.id</a>
-        </p>
     </body></html>
     """
 
@@ -120,11 +114,11 @@ async def send_email(request: SendEmailRequest):
                 failed.append(f"{recipient} ({str(e)[:60]})")
 
     if not sent_to:
-        raise HTTPException(status_code=500, detail=f"Semua email gagal terkirim: {', '.join(failed)}")
+        raise HTTPException(status_code=500, detail=f"All emails failed to send: {', '.join(failed)}")
 
     return SendEmailResponse(
         success=True,
-        message=f"Terkirim ke {len(sent_to)} penerima" + (f", {len(failed)} gagal" if failed else ""),
+        message=f"Sent to {len(sent_to)} recipient(s)" + (f", {len(failed)} failed" if failed else ""),
         sent_to=sent_to,
         failed=failed,
     )

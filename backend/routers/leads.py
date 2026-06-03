@@ -152,8 +152,24 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
     if DUMMY_MODE and get_dummy_companies:
         raw = [c for c in get_dummy_companies() if c.id not in exclude_ids]
     else:
-        raw = await discover_companies(icp, per_page=50)
-        raw = [c for c in raw if c.id not in exclude_ids]
+        raw = []
+        seen_ids = set(exclude_ids)
+        # Apollo returns the same first page for identical searches. Once those
+        # companies are already stored, scan subsequent pages for fresh leads.
+        for page in range(1, 6):
+            page_companies = await discover_companies(icp, per_page=50, page=page)
+            if not page_companies:
+                break
+
+            new_companies = []
+            for company in page_companies:
+                if company.id and company.id not in seen_ids:
+                    seen_ids.add(company.id)
+                    new_companies.append(company)
+
+            raw.extend(new_companies)
+            if len(raw) >= limit * 3:
+                break
 
     filtered = apply_icp_filter(raw, icp)
     top_scored = score_companies(filtered, icp, top_n=limit)

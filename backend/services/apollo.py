@@ -15,7 +15,7 @@ def _headers(key: str) -> dict:
 HEADERS = _headers(APOLLO_API_KEY_ORG or "")
 
 
-async def discover_companies(icp: ICPConfig, per_page: int = 25) -> List[Company]:
+async def discover_companies(icp: ICPConfig, per_page: int = 25, page: int = 1) -> List[Company]:
     """
     Search Apollo for companies matching ICP.
     Returns raw list before scoring.
@@ -26,7 +26,7 @@ async def discover_companies(icp: ICPConfig, per_page: int = 25) -> List[Company
         "organization_industry_tag_ids": [],  # Apollo uses tags, mapped below
         "q_organization_keyword_tags": icp.keywords,
         "per_page": per_page,
-        "page": 1,
+        "page": page,
     }
 
     # Apollo uses industry names directly in some endpoints

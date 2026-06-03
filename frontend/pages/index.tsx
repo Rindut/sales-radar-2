@@ -87,7 +87,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
-      <Sidebar active="dashboard" />
+      <Sidebar active="dashboard" leadCount={data ? activeLeads.length : undefined} />
 
       <main style={{ flex: 1, background: "var(--canvas)", overflowY: "auto" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 28px 80px" }}>
@@ -97,7 +97,7 @@ export default function Dashboard() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", boxShadow: "0 0 0 3px var(--accent-dim)" }} />
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", color: "var(--accent-text)" }}>
-                Live · Diperbarui {timeStr}
+                Live · Last updated {timeStr}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -238,7 +238,7 @@ function LeadCard({ lead, isSkipped, onToggleSkip, onOutreach }: {
                 transition: "all 0.15s",
               }}
             >
-              Skip this lead
+              Skip
             </button>
           </div>
 

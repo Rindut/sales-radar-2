@@ -68,6 +68,7 @@ export default function LeadDetail() {
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [outreach, setOutreach] = useState<OutreachDraft | null>(null);
+  const [subject, setSubject] = useState("");
   const [draft, setDraft] = useState("");
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [channel, setChannel] = useState<"linkedin" | "email" | "whatsapp">("linkedin");
@@ -100,16 +101,16 @@ export default function LeadDetail() {
   useEffect(() => {
     if (!id || !lead) return;
     const selected = lead.contacts?.[selectedContactIdx] ?? lead.contacts?.[0];
-    setOutreach(null); setDraft("");
+    setOutreach(null); setSubject(""); setDraft("");
     setOutreachLoading(true);
     api.generateOutreach(id as string, channel, selected?.name ?? undefined, selected?.role ?? undefined)
-      .then(d => { setOutreach(d); setDraft(d.message); })
+      .then(d => { setOutreach(d); setSubject(d.subject ?? ""); setDraft(d.message); })
       .catch((e: any) => setError(e.message))
       .finally(() => setOutreachLoading(false));
   }, [id, channel, selectedContactIdx, lead]);
 
   const handleCopy = () => {
-    const text = outreach?.subject ? `Subject: ${outreach.subject}\n\n${draft}` : draft;
+    const text = subject ? `Subject: ${subject}\n\n${draft}` : draft;
     navigator.clipboard.writeText(text).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -122,7 +123,7 @@ export default function LeadDetail() {
     try {
       const payload: SendEmailRequest = {
         to_email: emailTo,
-        subject: outreach?.subject || `Perkenalan dari Bawana - ${lead.company.name}`,
+        subject: subject || `Perkenalan dari Bawana - ${lead.company.name}`,
         message: draft,
         company_name: lead.company.name,
       };
@@ -203,7 +204,7 @@ export default function LeadDetail() {
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            Kembali ke Today&apos;s Leads
+            Back to Today&apos;s Leads
           </button>
 
           {/* Header card */}
@@ -331,9 +332,30 @@ export default function LeadDetail() {
               {channel === "linkedin" && <span style={{ fontSize: 11, color: "var(--accent-text)", fontWeight: 600 }}>✓ Recommended</span>}
             </div>
 
-            {outreach?.subject && (
-              <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 10 }}>
-                <strong>Subject:</strong> {outreach.subject}
+            {(channel === "email" || subject) && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-2)", marginBottom: 6 }}>
+                  Subject:
+                </label>
+                <input
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  placeholder={lead ? `Perkenalan dari Bawana - ${lead.company.name}` : "Subject email"}
+                  type="text"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--canvas)",
+                    color: "var(--text)",
+                    fontSize: 13,
+                    outline: "none",
+                    fontFamily: "var(--font-body)",
+                  }}
+                  onFocus={e => (e.target.style.borderColor = "var(--accent)")}
+                  onBlur={e => (e.target.style.borderColor = "var(--border)")}
+                />
               </div>
             )}
 
@@ -375,7 +397,7 @@ export default function LeadDetail() {
               {/* Email button */}
               {channel === "email" && (
                 <button onClick={() => setShowEmailInput(!showEmailInput)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: emailSent ? "#16a34a" : "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <EmailIcon /> {emailSent ? "Terkirim! ✓" : "Kirim Email"}
+                  <EmailIcon /> {emailSent ? "Sent! ✓" : "Send E-mail"}
                 </button>
               )}
 
@@ -414,7 +436,7 @@ export default function LeadDetail() {
                     disabled={emailSending || !emailTo}
                     style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: emailSending ? "var(--border)" : "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: emailSending ? "not-allowed" : "pointer", whiteSpace: "nowrap" as const }}
                   >
-                    {emailSending ? "Mengirim..." : "Kirim →"}
+                    {emailSending ? "Sending..." : "Send →"}
                   </button>
                 </div>
                 {emailError && <p style={{ fontSize: 12, color: "#ef4444", marginTop: 8 }}>⚠ {emailError}</p>}

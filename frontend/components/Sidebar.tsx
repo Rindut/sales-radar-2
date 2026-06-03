@@ -1,14 +1,32 @@
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
 
 type Page = "dashboard" | "pipeline" | "history" | "settings" | "playbook";
 
-export default function Sidebar({ active }: { active: Page }) {
+export default function Sidebar({ active, leadCount }: { active: Page; leadCount?: number }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [fallbackLeadCount, setFallbackLeadCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (leadCount !== undefined) return;
+
+    let cancelled = false;
+    api.getTopLeads(false)
+      .then(data => {
+        if (cancelled) return;
+        setFallbackLeadCount(data.leads.filter(lead => !lead.is_rejected).length);
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [leadCount]);
+
+  const resolvedLeadCount = leadCount ?? fallbackLeadCount;
 
   const nav: { id: Page; label: string; href: string; badge?: string; icon: JSX.Element }[] = [
-    { id: "dashboard", label: "Leads",    href: "/",          badge: "10", icon: <TargetIcon /> },
+    { id: "dashboard", label: "Leads",    href: "/",          badge: resolvedLeadCount === null ? undefined : String(resolvedLeadCount), icon: <TargetIcon /> },
     { id: "settings",  label: "Settings", href: "/settings",               icon: <SettingsIcon /> },
     { id: "playbook",  label: "Playbook", href: "/playbook",               icon: <PlaybookIcon /> },
   ];

@@ -82,7 +82,7 @@ async def generate_outreach_draft(
 
     channel_instruction = {
         "linkedin": "Tulis LinkedIn message yang singkat, personal, tidak terkesan spam. Maksimal 300 karakter. Jangan pitch langsung. Gunakan nama depan 'Anna' sebagai pengirim.",
-        "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA. Akhiri dengan signature lengkap.",
+        "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA. Pisahkan setiap paragraf dengan satu baris kosong. Akhiri dengan signature lengkap.",
         "whatsapp": "Tulis pesan WhatsApp singkat dan conversational. Maksimal 200 karakter. Perkenalkan diri sebagai Anna dari Bawana.",
     }.get(channel, "Tulis pesan singkat dan personal.")
 
@@ -146,7 +146,7 @@ TIPS:
 
 def _parse_response(raw: str, company_id: str, channel: str) -> OutreachDraft:
     subject = None
-    message = ""
+    message_lines = []
     tips = []
     section = None
 
@@ -158,15 +158,17 @@ def _parse_response(raw: str, company_id: str, channel: str) -> OutreachDraft:
             section = "message"
         elif s.startswith("TIPS:"):
             section = "tips"
-        elif section == "message" and s:
-            message += s + "\n"
+        elif section == "message":
+            message_lines.append(line.rstrip())
         elif section == "tips" and s.startswith("-"):
             tips.append(s.lstrip("- ").strip())
+
+    message = "\n".join(message_lines).strip()
 
     return OutreachDraft(
         company_id=company_id,
         channel=channel,
         subject=subject,
-        message=message.strip(),
+        message=message,
         tips=tips,
     )
