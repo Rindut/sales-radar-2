@@ -57,6 +57,29 @@ const APOLLO_KEYWORDS = [
   "lxp", "lms",
 ];
 
+const COUNTRY_OPTIONS = [
+  "Indonesia",
+  "Singapore",
+  "Malaysia",
+  "Philippines",
+  "Thailand",
+  "Vietnam",
+  "India",
+  "Australia",
+  "United States",
+  "United Kingdom",
+  "Japan",
+  "South Korea",
+  "China",
+  "Hong Kong",
+  "Taiwan",
+  "United Arab Emirates",
+  "Saudi Arabia",
+  "Germany",
+  "France",
+  "Netherlands",
+];
+
 export default function Settings() {
   const [config, setConfig] = useState<ICPConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,30 +132,36 @@ export default function Settings() {
       <main style={{ flex: 1, background: "var(--canvas)", overflowY: "auto" }}>
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 28px 80px" }}>
 
-          <div className="fade-up" style={{ marginBottom: 36 }}>
+          <div className="fade-up" style={{ marginBottom: 36, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.8px", color: "var(--text)" }}>Settings</h1>
-            <p style={{ marginTop: 6, color: "var(--text-2)", fontSize: 15 }}>Kontrol siapa yang ingin kamu target</p>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 10,
+                border: "none",
+                background: saved ? "#15803d" : "#16a34a",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: saving ? "not-allowed" : "pointer",
+                opacity: saving ? 0.72 : 1,
+                boxShadow: "0 8px 18px rgba(22,163,74,0.18)",
+                transition: "background 0.15s ease, opacity 0.15s ease",
+              }}
+              onMouseEnter={e => {
+                if (!saving && !saved) e.currentTarget.style.background = "#15803d";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = saved ? "#15803d" : "#16a34a";
+              }}
+            >
+              {saving ? "Saving..." : saved ? "Saved ✓" : "Save Changes"}
+            </button>
           </div>
 
           {error && <p style={{ color: "#ef4444", marginBottom: 20, fontSize: 14 }}>⚠ {error}</p>}
-
-          {/* Data Sources */}
-          <Section className="fade-up fade-up-1" title="Data Sources" subtitle="Pilih dari mana leads dikumpulkan">
-            {[
-              { label: "Apollo.io", desc: "Database company & contact global", status: "Connected", active: true },
-              { label: "Website Crawl", desc: "Crawl career page & website update", status: "Active", active: true },
-              { label: "LinkedIn", desc: "Signal hiring & activity LinkedIn", status: "Not connected", active: false },
-            ].map(src => (
-              <div key={src.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{src.label}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{src.desc}</div>
-                  <div style={{ fontSize: 11, marginTop: 4, color: src.active ? "var(--accent-text)" : "var(--text-3)", fontWeight: 600 }}>{src.status}</div>
-                </div>
-                <Toggle value={src.active} onChange={() => {}} />
-              </div>
-            ))}
-          </Section>
 
           {/* ICP Config */}
           {loading ? (
@@ -140,24 +169,25 @@ export default function Settings() {
               <div style={spinner} />
             </div>
           ) : config && (
-            <Section className="fade-up fade-up-2" title="ICP Configuration" subtitle="Ideal Customer Profile yang kamu targetkan">
+            <Section className="fade-up fade-up-1" title="ICP Configuration" subtitle="Define the Ideal Customer Profile (ICP) for lead generation.">
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
                 {/* Industry - Apollo dropdown */}
-                <DropdownTagField
-                  label="Target Industri"
-                  hint="Pilih dari daftar industri Apollo"
+                <SelectTagField
+                  label="Target Industry"
+                  hint="Select industry"
                   tags={config.industries}
                   options={APOLLO_INDUSTRIES}
                   onRemove={v => setConfig({ ...config, industries: config.industries.filter(x => x !== v) })}
                   onAdd={v => setConfig({ ...config, industries: config.industries.includes(v) ? config.industries : [...config.industries, v] })}
                 />
 
-                {/* Location - free text */}
-                <TagField
-                  label="Target Lokasi"
-                  hint="contoh: Indonesia, Jakarta"
+                {/* Location - country dropdown */}
+                <CountryDropdownField
+                  label="Target Country"
+                  hint="Select country"
                   tags={config.locations}
+                  options={COUNTRY_OPTIONS}
                   onRemove={v => setConfig({ ...config, locations: config.locations.filter(x => x !== v) })}
                   onAdd={v => setConfig({ ...config, locations: config.locations.includes(v) ? config.locations : [...config.locations, v] })}
                 />
@@ -165,7 +195,7 @@ export default function Settings() {
                 {/* Keywords - Apollo dropdown + custom */}
                 <DropdownTagField
                   label="Keywords"
-                  hint="Pilih atau ketik keyword Apollo"
+                  hint="Select or type an Apollo keyword"
                   tags={config.keywords}
                   options={APOLLO_KEYWORDS}
                   allowCustom
@@ -175,8 +205,8 @@ export default function Settings() {
 
                 {/* Target roles - free text */}
                 <TagField
-                  label="Target Jabatan"
-                  hint="contoh: Head of Learning, HR Director"
+                  label="Target Roles"
+                  hint="Example: Head of Learning, HR Director"
                   tags={config.target_roles}
                   onRemove={v => setConfig({ ...config, target_roles: config.target_roles.filter(x => x !== v) })}
                   onAdd={v => setConfig({ ...config, target_roles: config.target_roles.includes(v) ? config.target_roles : [...config.target_roles, v] })}
@@ -184,23 +214,41 @@ export default function Settings() {
 
                 {/* Employee ranges */}
                 <div>
-                  <label style={labelStyle}>Rentang Karyawan</label>
+                  <label style={labelStyle}>Employee Range</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {config.employee_ranges.map((range, i) => (
                       <div key={i} style={{ display: "flex", gap: 8 }}>
-                        <input value={range} onChange={e => updateList("employee_ranges", i, e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="contoh: 500,50000" />
+                        <input value={range} onChange={e => updateList("employee_ranges", i, e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Example: 500,50000" />
                         <button onClick={() => removeItem("employee_ranges", i)} style={removeBtnStyle}>✕</button>
                       </div>
                     ))}
-                    <button onClick={() => addItem("employee_ranges")} style={addBtnStyle}>+ Tambah Range</button>
+                    <button onClick={() => addItem("employee_ranges")} style={addBtnStyle}>+ Add Range</button>
                   </div>
                 </div>
               </div>
             </Section>
           )}
 
+          {/* Data Sources */}
+          <Section className="fade-up fade-up-2" title="Data Sources" subtitle="Choose where leads are collected from">
+            {[
+              { label: "Apollo.io", desc: "Database company & contact global", status: "Connected", active: true },
+              { label: "Website Crawl", desc: "Crawl career page & website update", status: "Active", active: true },
+              { label: "LinkedIn", desc: "Signal hiring & activity LinkedIn", status: "Not connected", active: false },
+            ].map(src => (
+              <div key={src.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{src.label}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{src.desc}</div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: src.active ? "#16a34a" : "var(--text-3)", fontWeight: 600 }}>{src.status}</div>
+                </div>
+                <Toggle value={src.active} onChange={() => {}} />
+              </div>
+            ))}
+          </Section>
+
           {/* System Status */}
-          <Section className="fade-up fade-up-3" title="System Status" subtitle="Info teknis untuk debugging">
+          <Section className="fade-up fade-up-3" title="System Status" subtitle="Technical information for debugging">
             {[
               { label: "Apollo API", status: "OK", ping: "120ms" },
               { label: "AI Scoring Engine", status: "OK", ping: "280ms" },
@@ -216,19 +264,6 @@ export default function Settings() {
               </div>
             ))}
           </Section>
-
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              padding: "12px 28px", borderRadius: 10, border: "none",
-              background: saved ? "var(--accent)" : "var(--text)",
-              color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-          >
-            {saving ? "Menyimpan..." : saved ? "Tersimpan ✓" : "Simpan Perubahan"}
-          </button>
         </div>
       </main>
     </div>
@@ -291,7 +326,7 @@ function DropdownTagField({ label, hint, tags, options, onRemove, onAdd, allowCu
                 onClick={() => { onAdd(query.trim()); setQuery(""); setOpen(false); }}
                 style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: "var(--accent-text)", fontStyle: "italic", borderBottom: "1px solid var(--border)" }}
               >
-                + Tambah "{query.trim()}"
+                + Add "{query.trim()}"
               </div>
             )}
             {filtered.slice(0, 8).map(o => (
@@ -305,12 +340,82 @@ function DropdownTagField({ label, hint, tags, options, onRemove, onAdd, allowCu
             ))}
             {filtered.length > 8 && (
               <div style={{ padding: "8px 14px", fontSize: 12, color: "var(--text-3)" }}>
-                +{filtered.length - 8} lainnya - ketik untuk filter
+                +{filtered.length - 8} more - type to filter
               </div>
             )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Fixed dropdown tag field - for controlled option lists
+function SelectTagField({ label, hint, tags, options, onRemove, onAdd }: {
+  label: string; hint: string; tags: string[]; options: string[];
+  onRemove: (v: string) => void; onAdd: (v: string) => void;
+}) {
+  const availableOptions = options.filter(option => !tags.includes(option));
+
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {tags.map(t => (
+          <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--canvas-2)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 500, color: "var(--text)" }}>
+            {t}
+            <button onClick={() => onRemove(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", lineHeight: 1, padding: 0, fontSize: 14 }}>×</button>
+          </span>
+        ))}
+      </div>
+      <select
+        value=""
+        onChange={e => {
+          if (!e.target.value) return;
+          onAdd(e.target.value);
+        }}
+        style={{ ...inputStyle, width: "100%", cursor: "pointer" }}
+      >
+        <option value="" disabled>{availableOptions.length > 0 ? hint : "All options selected"}</option>
+        {availableOptions.map(option => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// Country dropdown tag field - fixed country options, no free text
+function CountryDropdownField({ label, hint, tags, options, onRemove, onAdd }: {
+  label: string; hint: string; tags: string[]; options: string[];
+  onRemove: (v: string) => void; onAdd: (v: string) => void;
+}) {
+  const availableOptions = options.filter(option => !tags.includes(option));
+
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {tags.map(t => (
+          <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--canvas-2)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 500, color: "var(--text)" }}>
+            {t}
+            <button onClick={() => onRemove(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", lineHeight: 1, padding: 0, fontSize: 14 }}>×</button>
+          </span>
+        ))}
+      </div>
+      <select
+        value=""
+        onChange={e => {
+          if (!e.target.value) return;
+          onAdd(e.target.value);
+        }}
+        style={{ ...inputStyle, width: "100%", cursor: "pointer" }}
+      >
+        <option value="" disabled>{availableOptions.length > 0 ? hint : "All countries selected"}</option>
+        {availableOptions.map(country => (
+          <option key={country} value={country}>{country}</option>
+        ))}
+      </select>
     </div>
   );
 }

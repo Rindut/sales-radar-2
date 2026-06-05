@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8005";
 
 export interface Contact {
   name?: string;
@@ -6,6 +6,7 @@ export interface Contact {
   linkedin_url?: string;
   email?: string;
   phone?: string;
+  enrichment_warning?: string;
 }
 
 export interface LeadScore {
@@ -32,8 +33,10 @@ export interface Lead {
   company: Company;
   score: LeadScore;
   contacts: Contact[];
+  contact_warning?: string;
   fetched_at?: string;
   is_rejected?: boolean;
+  is_saved?: boolean;
 }
 
 export interface DashboardResponse {
@@ -59,10 +62,13 @@ export interface ICPConfig {
 }
 
 export interface SendEmailRequest {
+  company_id?: string;
   to_email: string;
   subject: string;
   message: string;
   company_name: string;
+  contact_name?: string;
+  contact_role?: string;
 }
 
 export interface SendEmailResponse {
@@ -70,6 +76,35 @@ export interface SendEmailResponse {
   message: string;
   sent_to: string[];
   failed: string[];
+}
+
+export interface OutreachEvent {
+  id: string;
+  company_id: string;
+  event_type: "outreach" | "note";
+  channel?: "email" | "linkedin" | "whatsapp" | string;
+  contact_name?: string;
+  contact_role?: string;
+  recipient?: string;
+  subject?: string;
+  message?: string;
+  status?: "sent" | "opened" | "copied" | "replied" | "no_response" | string;
+  note?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface OutreachEventCreate {
+  event_type?: "outreach" | "note";
+  channel?: "email" | "linkedin" | "whatsapp" | string;
+  contact_name?: string;
+  contact_role?: string;
+  recipient?: string;
+  subject?: string;
+  message?: string;
+  status?: string;
+  note?: string;
+  metadata?: Record<string, any>;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -97,6 +132,12 @@ export const api = {
   unskipLead: (companyId: string) =>
     request<{ status: string }>(`/leads/unreject/${companyId}`, { method: "POST" }),
 
+  saveLead: (companyId: string) =>
+    request<{ status: string }>(`/leads/save/${companyId}`, { method: "POST" }),
+
+  unsaveLead: (companyId: string) =>
+    request<{ status: string }>(`/leads/unsave/${companyId}`, { method: "POST" }),
+
   generateOutreach: (companyId: string, channel: string, contactName?: string, contactRole?: string) =>
     request<OutreachDraft>("/outreach/generate", {
       method: "POST",
@@ -112,6 +153,20 @@ export const api = {
     request<SendEmailResponse>("/outreach/send-email", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  getOutreachHistory: (companyId: string) =>
+    request<OutreachEvent[]>(`/outreach/history/${companyId}`),
+
+  createOutreachEvent: (companyId: string, data: OutreachEventCreate) =>
+    request<OutreachEvent>(`/outreach/history/${companyId}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  deleteOutreachEvent: (companyId: string, eventId: string) =>
+    request<{ status: string }>(`/outreach/history/${companyId}/${eventId}`, {
+      method: "DELETE",
     }),
 
   getICP: () => request<ICPConfig>("/settings/icp"),

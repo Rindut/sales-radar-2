@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 import os
+from datetime import datetime
+from uuid import uuid4
 
-from db import get_session, LeadRecord
+from db import get_session, LeadRecord, OutreachEventRecord
 from models.schemas import OutreachRequest, OutreachDraft, Company, Contact, LeadScore
 from services.ai_outreach import generate_outreach_draft
 
@@ -45,6 +47,15 @@ async def generate_outreach(
     else:
         contact = None
 
+    if request.contact_name or request.contact_role:
+        contact = Contact(
+            name=request.contact_name or (contact.name if contact else None),
+            role=request.contact_role or (contact.role if contact else None),
+            linkedin_url=contact.linkedin_url if contact else None,
+            email=contact.email if contact else None,
+            phone=contact.phone if contact else None,
+        )
+
     score = LeadScore(
         total=record.score,
         breakdown=record.score_breakdown or {},
@@ -55,10 +66,13 @@ async def generate_outreach(
 
 
 class SendEmailRequest(BaseModel):
+    company_id: str | None = None
     to_email: str   # comma-separated
     subject: str
     message: str
     company_name: str
+    contact_name: str | None = None
+    contact_role: str | None = None
 
 
 class SendEmailResponse(BaseModel):
@@ -68,8 +82,116 @@ class SendEmailResponse(BaseModel):
     failed: list[str]
 
 
+class OutreachEventCreate(BaseModel):
+    event_type: str = "outreach"
+    channel: str | None = None
+    contact_name: str | None = None
+    contact_role: str | None = None
+    recipient: str | None = None
+    subject: str | None = None
+    message: str | None = None
+    status: str | None = None
+    note: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class OutreachEventResponse(BaseModel):
+    id: str
+    company_id: str
+    event_type: str
+    channel: str | None = None
+    contact_name: str | None = None
+    contact_role: str | None = None
+    recipient: str | None = None
+    subject: str | None = None
+    message: str | None = None
+    status: str | None = None
+    note: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+def _event_to_response(record: OutreachEventRecord) -> OutreachEventResponse:
+    return OutreachEventResponse(
+        id=record.id,
+        company_id=record.company_id,
+        event_type=record.event_type,
+        channel=record.channel,
+        contact_name=record.contact_name,
+        contact_role=record.contact_role,
+        recipient=record.recipient,
+        subject=record.subject,
+        message=record.message,
+        status=record.status,
+        note=record.note,
+        metadata=record.event_metadata or {},
+        created_at=record.created_at,
+    )
+
+
+@router.get("/history/{company_id}", response_model=list[OutreachEventResponse])
+async def list_outreach_history(
+    company_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(OutreachEventRecord)
+        .where(OutreachEventRecord.company_id == company_id)
+        .order_by(OutreachEventRecord.created_at.desc())
+    )
+    return [_event_to_response(record) for record in result.scalars().all()]
+
+
+@router.post("/history/{company_id}", response_model=OutreachEventResponse)
+async def create_outreach_event(
+    company_id: str,
+    request: OutreachEventCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    lead = await session.get(LeadRecord, company_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found.")
+
+    record = OutreachEventRecord(
+        id=str(uuid4()),
+        company_id=company_id,
+        event_type=request.event_type,
+        channel=request.channel,
+        contact_name=request.contact_name,
+        contact_role=request.contact_role,
+        recipient=request.recipient,
+        subject=request.subject,
+        message=request.message,
+        status=request.status,
+        note=request.note,
+        event_metadata=request.metadata or {},
+        created_at=datetime.utcnow(),
+    )
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return _event_to_response(record)
+
+
+@router.delete("/history/{company_id}/{event_id}")
+async def delete_outreach_event(
+    company_id: str,
+    event_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    record = await session.get(OutreachEventRecord, event_id)
+    if not record or record.company_id != company_id:
+        raise HTTPException(status_code=404, detail="Outreach event not found.")
+    await session.delete(record)
+    await session.commit()
+    return {"status": "deleted"}
+
+
 @router.post("/send-email", response_model=SendEmailResponse)
-async def send_email(request: SendEmailRequest):
+async def send_email(
+    request: SendEmailRequest,
+    session: AsyncSession = Depends(get_session),
+):
     if not RESEND_API_KEY:
         raise HTTPException(status_code=500, detail="RESEND_API_KEY not configured.")
 
@@ -115,6 +237,24 @@ async def send_email(request: SendEmailRequest):
 
     if not sent_to:
         raise HTTPException(status_code=500, detail=f"All emails failed to send: {', '.join(failed)}")
+
+    if request.company_id:
+        event = OutreachEventRecord(
+            id=str(uuid4()),
+            company_id=request.company_id,
+            event_type="outreach",
+            channel="email",
+            contact_name=request.contact_name,
+            contact_role=request.contact_role,
+            recipient=", ".join(sent_to),
+            subject=request.subject or f"Perkenalan dari Bawana — {request.company_name}",
+            message=request.message,
+            status="sent",
+            event_metadata={"failed": failed},
+            created_at=datetime.utcnow(),
+        )
+        session.add(event)
+        await session.commit()
 
     return SendEmailResponse(
         success=True,

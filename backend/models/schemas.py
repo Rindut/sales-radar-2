@@ -9,6 +9,7 @@ class Contact(BaseModel):
     linkedin_url: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    enrichment_warning: Optional[str] = None
 
 
 class LeadScore(BaseModel):
@@ -35,8 +36,10 @@ class Lead(BaseModel):
     company: Company
     score: LeadScore
     contacts: List[Contact] = Field(default_factory=list)
+    contact_warning: Optional[str] = None
     fetched_at: Optional[datetime] = None
     is_rejected: bool = False
+    is_saved: bool = False
 
 
 class OutreachRequest(BaseModel):

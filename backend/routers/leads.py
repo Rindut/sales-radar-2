@@ -104,6 +104,7 @@ async def reject_lead(
     if not record:
         raise HTTPException(status_code=404, detail="Lead not found")
     record.is_rejected = True
+    record.is_saved = False
     await session.commit()
     return {"status": "rejected", "company_id": company_id}
 
@@ -121,6 +122,33 @@ async def unreject_lead(
     return {"status": "active", "company_id": company_id}
 
 
+@router.post("/save/{company_id}")
+async def save_lead(
+    company_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    record = await session.get(LeadRecord, company_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    record.is_saved = True
+    record.is_rejected = False
+    await session.commit()
+    return {"status": "saved", "company_id": company_id}
+
+
+@router.post("/unsave/{company_id}")
+async def unsave_lead(
+    company_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    record = await session.get(LeadRecord, company_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    record.is_saved = False
+    await session.commit()
+    return {"status": "active", "company_id": company_id}
+
+
 @router.get("/{company_id}", response_model=Lead)
 async def get_lead_detail(
     company_id: str,
@@ -131,17 +159,36 @@ async def get_lead_detail(
     )
     record = result.scalar_one_or_none()
     if record:
-        return _record_to_lead(record)
+        lead = _record_to_lead(record)
+        if _contacts_need_enrichment(lead.contacts):
+            icp = await _get_active_icp(session)
+            contacts, contact_warning = await resolve_contact(company_id, icp.target_roles)
+            if contacts:
+                lead.contacts = contacts
+                lead.contact_warning = contact_warning
+                await _upsert_lead(session, lead)
+                await session.commit()
+            elif contact_warning:
+                record.contact_warning = contact_warning
+                await session.commit()
+                lead.contact_warning = contact_warning
+        return lead
 
     company = await get_company_detail(company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Lead not found")
 
     icp = await _get_active_icp(session)
-    contacts = await resolve_contact(company_id, icp.target_roles)
+    contacts, contact_warning = await resolve_contact(company_id, icp.target_roles)
     from services.scoring import _score_company
     score = _score_company(company, icp)
-    lead = Lead(company=company, score=score, contacts=contacts, fetched_at=datetime.utcnow())
+    lead = Lead(
+        company=company,
+        score=score,
+        contacts=contacts,
+        contact_warning=contact_warning,
+        fetched_at=datetime.utcnow(),
+    )
     # Save to DB so outreach generation can find it
     await _upsert_lead(session, lead)
     await session.commit()
@@ -155,9 +202,9 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
         raw = []
         seen_ids = set(exclude_ids)
         # Apollo returns the same first page for identical searches. Once those
-        # companies are already stored, scan subsequent pages for fresh leads.
-        for page in range(1, 6):
-            page_companies = await discover_companies(icp, per_page=50, page=page)
+        # companies are already stored, scan deeper pages for fresh leads.
+        for page in range(1, 21):
+            page_companies = await discover_companies(icp, per_page=100, page=page)
             if not page_companies:
                 break
 
@@ -168,7 +215,7 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
                     new_companies.append(company)
 
             raw.extend(new_companies)
-            if len(raw) >= limit * 3:
+            if len(apply_icp_filter(raw, icp)) >= limit * 3:
                 break
 
     filtered = apply_icp_filter(raw, icp)
@@ -179,12 +226,14 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
         if DUMMY_MODE and get_dummy_contact:
             dummy = get_dummy_contact(company.id)
             contacts = [dummy] if dummy else []
+            contact_warning = None
         else:
-            contacts = await resolve_contact(company.id, icp.target_roles)
+            contacts, contact_warning = await resolve_contact(company.id, icp.target_roles)
         leads.append(Lead(
             company=company,
             score=score,
             contacts=contacts,
+            contact_warning=contact_warning,
             fetched_at=datetime.utcnow(),
         ))
     return leads
@@ -201,6 +250,7 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
         existing.founded_year = getattr(lead.company, 'founded_year', None)
         existing.revenue = getattr(lead.company, 'revenue', None)
         existing.contacts = contacts_json
+        existing.contact_warning = lead.contact_warning
         # Also update legacy columns to first contact for backward compat
         top = lead.contacts[0] if lead.contacts else None
         existing.contact_name = top.name if top else None
@@ -209,7 +259,7 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
         existing.contact_email = top.email if top else None
         existing.contact_phone = top.phone if top else None
         existing.fetched_at = lead.fetched_at
-        # Never reset is_rejected on upsert
+        # Never reset is_rejected or is_saved on upsert
     else:
         top = lead.contacts[0] if lead.contacts else None
         record = LeadRecord(
@@ -228,6 +278,7 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
             score_breakdown=lead.score.breakdown,
             reasoning=lead.score.reasoning,
             contacts=contacts_json,
+            contact_warning=lead.contact_warning,
             contact_name=top.name if top else None,
             contact_role=top.role if top else None,
             contact_linkedin=top.linkedin_url if top else None,
@@ -235,6 +286,7 @@ async def _upsert_lead(session: AsyncSession, lead: Lead):
             contact_phone=top.phone if top else None,
             fetched_at=lead.fetched_at,
             is_rejected=False,
+            is_saved=False,
         )
         session.add(record)
 
@@ -274,10 +326,23 @@ def _record_to_lead(r: LeadRecord) -> Lead:
             reasoning=r.reasoning or [],
         ),
         contacts=contacts,
+        contact_warning=r.contact_warning,
         fetched_at=r.fetched_at,
         is_rejected=r.is_rejected or False,
+        is_saved=r.is_saved or False,
     )
 
 
 def _icp_summary(icp: ICPConfig) -> str:
     return f"Industri: {', '.join(icp.industries[:3])} | Lokasi: {', '.join(icp.locations)} | Target: {', '.join(icp.target_roles[:2])}"
+
+
+def _contacts_need_enrichment(contacts: List[Contact]) -> bool:
+    if len(contacts) < 2:
+        return False
+
+    enriched_count = sum(
+        1 for contact in contacts
+        if contact.linkedin_url or contact.email or contact.phone
+    )
+    return enriched_count <= 1
