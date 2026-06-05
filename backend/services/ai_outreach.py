@@ -25,10 +25,59 @@ SIGNATURE = {
     "whatsapp": "- Anna (Bawana)",
 }
 
+ENGLISH_SIGNATURE = {
+    "linkedin": "Anna Savira | Sales Executive, Bawana",
+    "email": (
+        "Warm regards,\n"
+        "Anna Savira\n"
+        "Sales Executive, Bawana\n"
+        f"anna.savira@bawana.com | +62 812-9278-9875"
+    ),
+    "whatsapp": "- Anna (Bawana)",
+}
+
+
+def _is_indonesia_lead(company: Company) -> bool:
+    location = (company.location or "").lower()
+    return not location or "indonesia" in location
+
 
 def _mock_draft(company: Company, contact: Optional[Contact], channel: str) -> OutreachDraft:
-    first_name = contact.name.split()[0] if contact and contact.name else "Bapak/Ibu"
-    industry = company.industry or "perusahaan Anda"
+    use_indonesian = _is_indonesia_lead(company)
+    first_name = contact.name.split()[0] if contact and contact.name else ("Bapak/Ibu" if use_indonesian else "there")
+    industry = company.industry or ("perusahaan Anda" if use_indonesian else "your industry")
+
+    if not use_indonesian:
+        templates = {
+            "linkedin": (
+                f"Hi {first_name}, I am Anna from Bawana, a B2B LXP platform helping companies "
+                f"in {industry} improve employee learning engagement. Would it be okay if I shared "
+                f"how we support similar teams?"
+            ),
+            "email": (
+                f"Hi {first_name},\n\n"
+                f"I am reaching out because {company.name} looks highly relevant to the learning "
+                f"challenges Bawana helps enterprise teams solve.\n\n"
+                f"Bawana is a B2B LXP platform that helps companies create more engaging learning "
+                f"experiences, from structured courses and learning journeys to content production.\n\n"
+                f"Would you be open to a 20-minute conversation this week?\n\n"
+                f"{ENGLISH_SIGNATURE['email']}"
+            ),
+            "whatsapp": (
+                f"Hi {first_name}, I am Anna from Bawana LXP. We help companies like {company.name} "
+                f"improve employee training effectiveness. Could we connect briefly? {ENGLISH_SIGNATURE['whatsapp']}"
+            ),
+        }
+        return OutreachDraft(
+            company_id=company.id,
+            channel=channel,
+            subject=f"Learning platform support for {company.name}" if channel == "email" else None,
+            message=templates.get(channel, templates["linkedin"]),
+            tips=[
+                "Personalize the message with a specific business or learning challenge before sending",
+                "Send on Tuesday to Thursday mornings for a higher response rate",
+            ],
+        )
 
     templates = {
         "linkedin": (
@@ -74,25 +123,42 @@ async def generate_outreach_draft(
     if not client:
         return _mock_draft(company, contact, channel)
 
+    use_indonesian = _is_indonesia_lead(company)
     contact_info = ""
     if contact:
         contact_info = f"Contact target:\n- Nama: {contact.name or 'tidak diketahui'}\n- Role: {contact.role or 'tidak diketahui'}\n"
 
     reasoning_text = "\n".join([f"- {r}" for r in score.reasoning])
 
-    channel_instruction = {
-        "linkedin": "Tulis LinkedIn message yang singkat, personal, tidak terkesan spam. Maksimal 300 karakter. Jangan pitch langsung. Gunakan nama depan 'Anna' sebagai pengirim.",
-        "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA. Pisahkan setiap paragraf dengan satu baris kosong. Akhiri dengan signature lengkap.",
-        "whatsapp": "Tulis pesan WhatsApp singkat dan conversational. Maksimal 200 karakter. Perkenalkan diri sebagai Anna dari Bawana.",
-    }.get(channel, "Tulis pesan singkat dan personal.")
+    if use_indonesian:
+        channel_instruction = {
+            "linkedin": "Tulis LinkedIn message yang singkat, personal, tidak terkesan spam. Maksimal 300 karakter. Jangan pitch langsung. Gunakan nama depan 'Anna' sebagai pengirim.",
+            "email": "Tulis email profesional dengan subject line menarik. Maksimal 150 kata. Struktur: hook -> konteks -> value proposition -> CTA. Pisahkan setiap paragraf dengan satu baris kosong. Akhiri dengan signature lengkap.",
+            "whatsapp": "Tulis pesan WhatsApp singkat dan conversational. Maksimal 200 karakter. Perkenalkan diri sebagai Anna dari Bawana.",
+        }.get(channel, "Tulis pesan singkat dan personal.")
+        signature_instruction = {
+            "linkedin": f"Signature: {SIGNATURE['linkedin']}",
+            "email": f"Gunakan signature ini persis:\n{SIGNATURE['email']}",
+            "whatsapp": f"Akhiri dengan: {SIGNATURE['whatsapp']}",
+        }.get(channel, "")
+        language_instruction = "Bahasa Indonesia yang natural dan profesional"
+    else:
+        channel_instruction = {
+            "linkedin": "Write a short, personal LinkedIn message that does not feel spammy. Maximum 300 characters. Do not hard-pitch. Use 'Anna' as the sender name.",
+            "email": "Write a professional email with a compelling subject line. Maximum 150 words. Structure: hook -> context -> value proposition -> CTA. Separate every paragraph with one blank line. End with the full signature.",
+            "whatsapp": "Write a short conversational WhatsApp message. Maximum 200 characters. Introduce yourself as Anna from Bawana.",
+        }.get(channel, "Write a short and personal message.")
+        signature_instruction = {
+            "linkedin": f"Signature: {ENGLISH_SIGNATURE['linkedin']}",
+            "email": f"Use this exact signature:\n{ENGLISH_SIGNATURE['email']}",
+            "whatsapp": f"End with: {ENGLISH_SIGNATURE['whatsapp']}",
+        }.get(channel, "")
+        language_instruction = "Natural, professional English. Do not write in Indonesian."
 
-    signature_instruction = {
-        "linkedin": f"Signature: {SIGNATURE['linkedin']}",
-        "email": f"Gunakan signature ini persis:\n{SIGNATURE['email']}",
-        "whatsapp": f"Akhiri dengan: {SIGNATURE['whatsapp']}",
-    }.get(channel, "")
+    lead_context_label = "Indonesia-based" if use_indonesian else "international"
 
     prompt = f"""Kamu adalah sales assistant dari Bawana, sebuah LXP B2B di Indonesia.
+Lead ini adalah lead {lead_context_label}. Jika lokasi company bukan Indonesia, semua draft outreach, subject, tips, dan CTA harus ditulis dalam bahasa Inggris.
 
 {BAWANA_CONTEXT}
 
@@ -121,7 +187,7 @@ Tulis pesan yang:
 1. Personal dan tidak generik
 2. Relevan dengan industri dan konteks perusahaan
 3. Tidak langsung jualan — buka percakapan dulu
-4. Bahasa Indonesia yang natural dan profesional
+4. {language_instruction}
 5. Sebutkan nama contact jika tersedia
 
 Format response:

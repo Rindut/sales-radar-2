@@ -4,6 +4,10 @@ from models.schemas import Company, Contact, ICPConfig
 from config import APOLLO_API_KEY_ORG, APOLLO_API_KEY_MIXED, APOLLO_API_KEY_PEOPLE, APOLLO_API_KEY_ENRICH
 
 APOLLO_BASE = "https://api.apollo.io/v1"
+APOLLO_CREDIT_WARNING = (
+    "Apollo contact enrichment may be out of credits or blocked by the current API key. "
+    "Some contact details could not be loaded."
+)
 
 def _headers(key: str) -> dict:
     return {
@@ -166,7 +170,7 @@ async def resolve_contact(
     company_id: str,
     target_roles: List[str],
     icp_keywords: List[str] = [],
-) -> List[Contact]:
+) -> tuple[List[Contact], Optional[str]]:
     """
     Find all relevant contacts at a company based on target roles + ICP keywords.
 
@@ -196,11 +200,11 @@ async def resolve_contact(
             json=search_payload,
         )
         if resp.status_code in (403, 402):
-            return []
+            return [], APOLLO_CREDIT_WARNING
         resp.raise_for_status()
         people = resp.json().get("people", [])
         if not people:
-            return []
+            return [], None
 
         # Score and sort by ICP relevance, take top 5
         people_scored = sorted(
@@ -211,56 +215,65 @@ async def resolve_contact(
         top5 = people_scored[:5]
 
         contacts: List[Contact] = []
+        warning: Optional[str] = None
 
-        # Step 2: enrich only the top-scored person (preserve API credits)
-        top = top5[0]
-        top_id = top.get("id")
-        enrich_payload: dict = {"id": top_id} if top_id else {
-            "organization_id": company_id,
-            "title": target_roles[0] if target_roles else None,
-        }
-        enrich_resp = await client.post(
-            f"{APOLLO_BASE}/people/match",
-            headers=_headers(APOLLO_API_KEY_ENRICH),
-            json=enrich_payload,
-        )
+        # Step 2: enrich all top 5 so each contact has the best available detail.
+        for idx, person in enumerate(top5):
+            if warning:
+                contacts.append(_partial_contact(person, warning))
+                continue
 
-        if enrich_resp.status_code == 200:
-            enriched = enrich_resp.json().get("person") or {}
-            contacts.append(Contact(
-                name=enriched.get("name") or top.get("first_name") or None,
-                role=enriched.get("title") or top.get("title"),
-                linkedin_url=enriched.get("linkedin_url"),
-                email=enriched.get("email"),
-                phone=(
-                    enriched.get("phone_numbers", [{}])[0].get("raw_number")
-                    if enriched.get("phone_numbers") else None
-                ),
-            ))
-        else:
-            contacts.append(Contact(
-                name=top.get("first_name") or None,
-                role=top.get("title"),
-                linkedin_url=None,
-                email=None,
-                phone=None,
-            ))
+            person_id = person.get("id")
+            enrich_payload: dict = {"id": person_id} if person_id else {
+                "organization_id": company_id,
+                "title": target_roles[0] if target_roles else None,
+            }
+            enrich_resp = await client.post(
+                f"{APOLLO_BASE}/people/match",
+                headers=_headers(APOLLO_API_KEY_ENRICH),
+                json=enrich_payload,
+            )
 
-        # Remaining top4 — partial data only (no extra enrich calls)
-        for person in top5[1:]:
-            full_name = " ".join(filter(None, [
-                person.get("first_name", ""),
-                person.get("last_name", ""),
-            ])) or None
-            contacts.append(Contact(
-                name=full_name,
-                role=person.get("title"),
-                linkedin_url=person.get("linkedin_url"),
-                email=person.get("email"),
-                phone=None,
-            ))
+            if enrich_resp.status_code == 200:
+                enriched = enrich_resp.json().get("person") or {}
+                contacts.append(Contact(
+                    name=enriched.get("name") or _full_name(person),
+                    role=enriched.get("title") or person.get("title"),
+                    linkedin_url=enriched.get("linkedin_url") or person.get("linkedin_url"),
+                    email=enriched.get("email") or person.get("email"),
+                    phone=(
+                        enriched.get("phone_numbers", [{}])[0].get("raw_number")
+                        if enriched.get("phone_numbers") else None
+                    ),
+                ))
+            elif enrich_resp.status_code in (402, 403):
+                warning = APOLLO_CREDIT_WARNING
+                contacts.append(_partial_contact(person, warning))
+                for remaining in top5[idx + 1:]:
+                    contacts.append(_partial_contact(remaining, warning))
+                break
+            else:
+                contacts.append(_partial_contact(person))
 
-        return contacts
+        return contacts, warning
+
+
+def _full_name(person: dict) -> Optional[str]:
+    return " ".join(filter(None, [
+        person.get("first_name", ""),
+        person.get("last_name", ""),
+    ])) or person.get("name") or None
+
+
+def _partial_contact(person: dict, warning: Optional[str] = None) -> Contact:
+    return Contact(
+        name=_full_name(person),
+        role=person.get("title"),
+        linkedin_url=person.get("linkedin_url"),
+        email=person.get("email"),
+        phone=None,
+        enrichment_warning=warning,
+    )
 
 
 def _extract_location(org: dict) -> Optional[str]:

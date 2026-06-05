@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { api, Lead, OutreachDraft, SendEmailRequest } from "../../lib/api";
+import { api, Lead, OutreachDraft, OutreachEvent, SendEmailRequest } from "../../lib/api";
 import Sidebar from "../../components/Sidebar";
 
 function scoreBadgeStyle(score: number): { color: string; background: string } {
-  if (score >= 85) return { color: "#1D8EDE", background: "#ddf0fc" };
+  if (score >= 85) return { color: "#16a34a", background: "#dcfce7" };
   if (score >= 70) return { color: "#F5A623", background: "#FFF3DC" };
-  return { color: "#7aaecb", background: "#EBF5FD" };
+  return { color: "#aaa", background: "#f3f4f6" };
 }
 
 function ScoreBadge({ score, size = "md" }: { score: number; size?: "md" | "xl" }) {
@@ -46,6 +46,8 @@ interface HistoryEntry {
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   sent:        { label: "Sent",        color: "#1D8EDE", bg: "#ddf0fc" },
+  opened:      { label: "Opened",      color: "#1D8EDE", bg: "#ddf0fc" },
+  copied:      { label: "Copied",      color: "#1D8EDE", bg: "#ddf0fc" },
   replied:     { label: "Replied",     color: "#16a34a", bg: "#dcfce7" },
   no_response: { label: "No Response", color: "#d97706", bg: "#fef3c7" },
 };
@@ -61,6 +63,29 @@ function saveHistory(companyId: string, entries: HistoryEntry[]) {
   localStorage.setItem(`history_${companyId}`, JSON.stringify(entries));
 }
 
+function formatHistoryDate(date: string) {
+  return new Date(date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function eventToHistoryEntry(event: OutreachEvent): HistoryEntry {
+  return {
+    id: event.id,
+    type: event.event_type === "note" ? "note" : "outreach",
+    channel: event.channel,
+    contact: event.channel === "email"
+      ? event.recipient || event.contact_name || undefined
+      : event.contact_name || event.recipient || undefined,
+    status: event.status as HistoryEntry["status"],
+    note: event.note || undefined,
+    date: formatHistoryDate(event.created_at),
+  };
+}
+
+function isIndonesiaLead(lead: Lead) {
+  const location = lead.company.location?.toLowerCase() ?? "";
+  return !location || location.includes("indonesia");
+}
+
 export default function LeadDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -74,6 +99,10 @@ export default function LeadDetail() {
   const [channel, setChannel] = useState<"linkedin" | "email" | "whatsapp">("linkedin");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSkipped, setIsSkipped] = useState(false);
+  const [leadActionLoading, setLeadActionLoading] = useState<"save" | "skip" | null>(null);
+  const [leadActionError, setLeadActionError] = useState<string | null>(null);
 
   // Email send state
   const [emailSending, setEmailSending] = useState(false);
@@ -91,16 +120,58 @@ export default function LeadDetail() {
 
   useEffect(() => {
     if (!id) return;
-    api.getLeadDetail(id as string)
-      .then(l => { setLead(l); if (l.contacts?.[0]?.email) setEmailTo(l.contacts[0].email ?? ""); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-    setHistory(getHistory(id as string));
+    let cancelled = false;
+
+    const loadLeadAndHistory = async () => {
+      try {
+        const companyId = id as string;
+        const [leadDetail, historyEvents] = await Promise.all([
+          api.getLeadDetail(companyId),
+          api.getOutreachHistory(companyId).catch(() => []),
+        ]);
+        if (cancelled) return;
+        setLead(leadDetail);
+        setIsSaved(Boolean(leadDetail.is_saved && !leadDetail.is_rejected));
+        setIsSkipped(Boolean(leadDetail.is_rejected));
+        if (leadDetail.contacts?.[0]?.email) setEmailTo(leadDetail.contacts[0].email ?? "");
+
+        const legacyHistory = getHistory(companyId);
+        if (historyEvents.length === 0 && legacyHistory.length > 0) {
+          const migrated: HistoryEntry[] = [];
+          for (const entry of legacyHistory) {
+            try {
+              const created = await api.createOutreachEvent(companyId, {
+                event_type: entry.type,
+                channel: entry.channel,
+                recipient: entry.contact,
+                status: entry.status,
+                note: entry.note,
+                metadata: { migrated_from_local_storage: true, original_date: entry.date },
+              });
+              migrated.push(eventToHistoryEntry(created));
+            } catch {
+              migrated.push(entry);
+            }
+          }
+          if (!cancelled) setHistory(migrated);
+        } else {
+          setHistory(historyEvents.map(eventToHistoryEntry));
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadLeadAndHistory();
+    return () => { cancelled = true; };
   }, [id]);
 
   useEffect(() => {
     if (!id || !lead) return;
     const selected = lead.contacts?.[selectedContactIdx] ?? lead.contacts?.[0];
+    setEmailTo(selected?.email ?? "");
     setOutreach(null); setSubject(""); setDraft("");
     setOutreachLoading(true);
     api.generateOutreach(id as string, channel, selected?.name ?? undefined, selected?.role ?? undefined)
@@ -109,39 +180,109 @@ export default function LeadDetail() {
       .finally(() => setOutreachLoading(false));
   }, [id, channel, selectedContactIdx, lead]);
 
+  const refreshHistory = async (companyId: string) => {
+    const events = await api.getOutreachHistory(companyId);
+    setHistory(events.map(eventToHistoryEntry));
+  };
+
+  const recordOutreachEvent = async (status: "opened" | "copied", overrideChannel?: "linkedin" | "whatsapp" | "email") => {
+    if (!id || !lead) return;
+    const selected = lead.contacts?.[selectedContactIdx] ?? lead.contacts?.[0];
+    const eventChannel = overrideChannel || channel;
+    const event = await api.createOutreachEvent(id as string, {
+      event_type: "outreach",
+      channel: eventChannel,
+      contact_name: selected?.name,
+      contact_role: selected?.role,
+      recipient: eventChannel === "whatsapp"
+        ? selected?.phone
+        : eventChannel === "linkedin"
+          ? selected?.linkedin_url
+          : undefined,
+      subject: subject || undefined,
+      message: draft || undefined,
+      status,
+    });
+    setHistory(prev => [eventToHistoryEntry(event), ...prev]);
+  };
+
   const handleCopy = () => {
     const text = subject ? `Subject: ${subject}\n\n${draft}` : draft;
     navigator.clipboard.writeText(text).catch(() => {});
+    recordOutreachEvent("copied").catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleToggleSave = async () => {
+    if (!id || leadActionLoading) return;
+    const nextSaved = !isSaved;
+    const previousSaved = isSaved;
+    const previousSkipped = isSkipped;
+    setLeadActionLoading("save");
+    setLeadActionError(null);
+    setIsSaved(nextSaved);
+    if (nextSaved) setIsSkipped(false);
+    try {
+      if (nextSaved) {
+        await api.saveLead(id as string);
+      } else {
+        await api.unsaveLead(id as string);
+      }
+    } catch (e: any) {
+      setIsSaved(previousSaved);
+      setIsSkipped(previousSkipped);
+      setLeadActionError(e.message);
+    } finally {
+      setLeadActionLoading(null);
+    }
+  };
+
+  const handleToggleSkip = async () => {
+    if (!id || leadActionLoading) return;
+    const nextSkipped = !isSkipped;
+    const previousSaved = isSaved;
+    const previousSkipped = isSkipped;
+    setLeadActionLoading("skip");
+    setLeadActionError(null);
+    setIsSkipped(nextSkipped);
+    if (nextSkipped) setIsSaved(false);
+    try {
+      if (nextSkipped) {
+        await api.skipLead(id as string);
+      } else {
+        await api.unskipLead(id as string);
+      }
+    } catch (e: any) {
+      setIsSaved(previousSaved);
+      setIsSkipped(previousSkipped);
+      setLeadActionError(e.message);
+    } finally {
+      setLeadActionLoading(null);
+    }
+  };
+
   const handleSendEmail = async () => {
     if (!lead || !emailTo || !draft) return;
+    const selected = lead.contacts?.[selectedContactIdx] ?? lead.contacts?.[0];
     setEmailSending(true);
     setEmailError(null);
     try {
       const payload: SendEmailRequest = {
+        company_id: id as string,
         to_email: emailTo,
-        subject: subject || `Perkenalan dari Bawana - ${lead.company.name}`,
+        subject: subject || (isIndonesiaLead(lead)
+          ? `Perkenalan dari Bawana - ${lead.company.name}`
+          : `Introduction from Bawana - ${lead.company.name}`),
         message: draft,
         company_name: lead.company.name,
+        contact_name: selected?.name,
+        contact_role: selected?.role,
       };
       await api.sendEmail(payload);
       setEmailSent(true);
       setShowEmailInput(false);
-      // Log to history
-      const entry: HistoryEntry = {
-        id: Date.now().toString(),
-        type: "outreach",
-        channel: "email",
-        contact: emailTo,
-        status: "sent",
-        date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
-      };
-      const updated = [entry, ...history];
-      setHistory(updated);
-      saveHistory(id as string, updated);
+      await refreshHistory(id as string);
       setTimeout(() => setEmailSent(false), 3000);
     } catch (e: any) {
       setEmailError(e.message);
@@ -150,23 +291,33 @@ export default function LeadDetail() {
     }
   };
 
-  const addNote = () => {
+  const addNote = async () => {
     if (!id || !noteInput.trim()) return;
-    const entry: HistoryEntry = {
-      id: Date.now().toString(), type: "note", note: noteInput.trim(),
-      date: new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
-    };
-    const updated = [entry, ...history];
-    setHistory(updated);
-    saveHistory(id as string, updated);
+    const note = noteInput.trim();
     setNoteInput("");
+    try {
+      const event = await api.createOutreachEvent(id as string, {
+        event_type: "note",
+        note,
+      });
+      setHistory(prev => [eventToHistoryEntry(event), ...prev]);
+    } catch (e: any) {
+      setNoteInput(note);
+      setError(e.message);
+    }
   };
 
-  const deleteEntry = (entryId: string) => {
+  const deleteEntry = async (entryId: string) => {
     if (!id) return;
+    const previous = history;
     const updated = history.filter(h => h.id !== entryId);
     setHistory(updated);
-    saveHistory(id as string, updated);
+    try {
+      await api.deleteOutreachEvent(id as string, entryId);
+    } catch (e: any) {
+      setHistory(previous);
+      setError(e.message);
+    }
   };
 
   if (loading) return (
@@ -190,6 +341,7 @@ export default function LeadDetail() {
   const score = Math.round(lead.score.total);
   const contacts = lead.contacts ?? [];
   const contact = contacts[selectedContactIdx] ?? contacts[0] ?? null;
+  const contactWarning = lead.contact_warning || contacts.find(c => c.enrichment_warning)?.enrichment_warning || null;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
@@ -204,7 +356,7 @@ export default function LeadDetail() {
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            Back to Today&apos;s Leads
+            Back to Leads
           </button>
 
           {/* Header card */}
@@ -216,12 +368,53 @@ export default function LeadDetail() {
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Lead Detail</div>
                 <h1 style={{ fontSize: 28, fontWeight: 800, color: "#fff", letterSpacing: "-0.8px", lineHeight: 1.1, marginBottom: 6 }}>{lead.company.name}</h1>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>
-                  {[lead.company.industry, lead.company.employee_count ? `${lead.company.employee_count.toLocaleString()}+ karyawan` : null, lead.company.location].filter(Boolean).join(" · ")}
+                  {[lead.company.industry, lead.company.employee_count ? `${lead.company.employee_count.toLocaleString()}+ employees` : null, lead.company.location].filter(Boolean).join(" · ")}
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                 <ScoreBadge score={score} size="xl" />
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>PRIORITY SCORE</span>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button
+                    onClick={handleToggleSave}
+                    disabled={leadActionLoading !== null}
+                    style={{
+                      padding: "7px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #86efac",
+                      background: isSaved ? "#dcfce7" : "rgba(220,252,231,0.92)",
+                      color: "#16a34a",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: leadActionLoading ? "not-allowed" : "pointer",
+                      opacity: leadActionLoading ? 0.72 : 1,
+                    }}
+                  >
+                    {leadActionLoading === "save" ? "Saving..." : isSaved ? "Saved" : "Save"}
+                  </button>
+                  <button
+                    onClick={handleToggleSkip}
+                    disabled={leadActionLoading !== null}
+                    style={{
+                      padding: "7px 12px",
+                      borderRadius: 8,
+                      border: isSkipped ? "1px solid #fecaca" : "1px solid rgba(255,255,255,0.28)",
+                      background: isSkipped ? "#fee2e2" : "rgba(255,255,255,0.14)",
+                      color: isSkipped ? "#ef4444" : "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: leadActionLoading ? "not-allowed" : "pointer",
+                      opacity: leadActionLoading ? 0.72 : 1,
+                    }}
+                  >
+                    {leadActionLoading === "skip" ? "Updating..." : isSkipped ? "Skipped" : "Skip"}
+                  </button>
+                </div>
+                {leadActionError && (
+                  <span style={{ maxWidth: 220, fontSize: 11, color: "#fee2e2", textAlign: "right", lineHeight: 1.4 }}>
+                    ⚠ {leadActionError}
+                  </span>
+                )}
               </div>
             </div>
             <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
@@ -239,23 +432,28 @@ export default function LeadDetail() {
           </div>
 
           {/* Why This Company */}
-          <Section className="fade-up fade-up-1" title="⭐ Why This Company" subtitle="Alasan sistem memilih company ini hari ini">
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Section className="fade-up fade-up-1" title="Why This Company" subtitle="Why the system selected this company">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {lead.score.reasoning.map((r, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 16px", borderRadius: 10, background: i === 0 ? "var(--accent-dim)" : "var(--canvas)", border: `1px solid ${i === 0 ? "rgba(29,142,222,0.2)" : "var(--border)"}` }}>
-                  <div style={{ marginTop: 2, width: 6, height: 6, borderRadius: "50%", background: i === 0 ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
-                  <span style={{ fontSize: 14, color: i === 0 ? "var(--accent-text)" : "var(--text)", lineHeight: 1.6, fontWeight: i === 0 ? 600 : 400 }}>{r}</span>
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0" }}>
+                  <div style={{ marginTop: 7, width: 5, height: 5, borderRadius: "50%", background: i === 0 ? "var(--accent)" : "var(--text-3)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: i === 0 ? "var(--accent-text)" : "var(--text)", lineHeight: 1.5, fontWeight: i === 0 ? 600 : 400 }}>{r}</span>
                 </div>
               ))}
             </div>
           </Section>
 
           {/* Contact Persons */}
-          {contacts.length > 0 && (
+          {(contacts.length > 0 || contactWarning) && (
             <Section className="fade-up fade-up-3"
-              title={`Contact Person${contacts.length > 1 ? ` (${contacts.length} ditemukan)` : ""}`}
-              subtitle={contacts.length > 1 ? "Pilih contact yang akan digunakan untuk outreach" : undefined}
+              title={`Contact Person${contacts.length > 1 ? ` (${contacts.length} found)` : ""}`}
+              subtitle={contacts.length > 1 ? "Choose the contact to use for outreach" : undefined}
             >
+              {contactWarning && (
+                <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+                  ⚠ {contactWarning}
+                </div>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {contacts.map((c, idx) => {
                   const isSelected = idx === selectedContactIdx;
@@ -282,7 +480,7 @@ export default function LeadDetail() {
                             {c.name || "-"}
                             {isSelected && contacts.length > 1 && (
                               <span style={{ marginLeft: 8, fontSize: 10, background: "var(--accent)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, verticalAlign: "middle" }}>
-                                DIPILIH
+                                SELECTED
                               </span>
                             )}
                           </div>
@@ -329,7 +527,11 @@ export default function LeadDetail() {
                   {ch === "linkedin" ? "LinkedIn" : ch === "email" ? "Email" : "WhatsApp"}
                 </button>
               ))}
-              {channel === "linkedin" && <span style={{ fontSize: 11, color: "var(--accent-text)", fontWeight: 600 }}>✓ Recommended</span>}
+              {contacts.length > 1 && (
+                <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, lineHeight: 1.4 }}>
+                  Select a contact above to update the name and role in this draft.
+                </span>
+              )}
             </div>
 
             {(channel === "email" || subject) && (
@@ -384,20 +586,26 @@ export default function LeadDetail() {
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
               <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: copied ? "var(--accent)" : "var(--text)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
-                <CopyIcon /> {copied ? "Tersalin! ✓" : "Copy Message"}
+                <CopyIcon /> {copied ? "Copied! ✓" : "Copy Message"}
               </button>
 
               {/* LinkedIn button */}
               {contact?.linkedin_url && channel === "linkedin" && (
-                <a href={contact.linkedin_url} target="_blank" rel="noopener" style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                  <LinkedInIcon /> Buka LinkedIn
+                <a
+                  href={contact.linkedin_url}
+                  target="_blank"
+                  rel="noopener"
+                  onClick={() => { recordOutreachEvent("opened", "linkedin").catch(() => {}); }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#0077b5", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+                >
+                  <LinkedInIcon /> Open LinkedIn
                 </a>
               )}
 
               {/* Email button */}
               {channel === "email" && (
                 <button onClick={() => setShowEmailInput(!showEmailInput)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: emailSent ? "#16a34a" : "#0ea5e9", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <EmailIcon /> {emailSent ? "Sent! ✓" : "Send E-mail"}
+                  <EmailIcon /> {emailSent ? "Sent! ✓" : "Show recipients' e-mail"}
                 </button>
               )}
 
@@ -406,14 +614,15 @@ export default function LeadDetail() {
                 <a
                   href={`https://wa.me/${contact.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(draft)}`}
                   target="_blank" rel="noopener"
+                  onClick={() => { recordOutreachEvent("opened", "whatsapp").catch(() => {}); }}
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", borderRadius: 8, border: "none", background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
                 >
-                  <WhatsAppIcon /> Kirim WhatsApp {contacts.length > 1 ? `ke ${contact.name?.split(" ")[0]}` : ""}
+                  <WhatsAppIcon /> Send WhatsApp {contacts.length > 1 ? `to ${contact.name?.split(" ")[0]}` : ""}
                 </a>
               )}
               {channel === "whatsapp" && !contact?.phone && (
                 <span style={{ fontSize: 13, color: "var(--text-3)", alignSelf: "center", fontStyle: "italic" }}>
-                  {contacts.length > 1 ? "Contact yang dipilih tidak memiliki nomor HP" : "Nomor HP tidak tersedia untuk lead ini"}
+                  {contacts.length > 1 ? "Selected contact does not have a phone number" : "No phone number available for this lead"}
                 </span>
               )}
             </div>
@@ -421,8 +630,8 @@ export default function LeadDetail() {
             {/* Email input panel */}
             {channel === "email" && showEmailInput && (
               <div style={{ marginTop: 14, padding: 16, background: "var(--canvas)", border: "1px solid var(--border)", borderRadius: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)", marginBottom: 4 }}>Kirim ke:</div>
-                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 8 }}>Pisahkan dengan koma untuk multiple penerima</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)", marginBottom: 4 }}>Send to:</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 8 }}>Separate multiple recipients with commas</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     value={emailTo}
@@ -445,7 +654,7 @@ export default function LeadDetail() {
           </Section>
 
           {/* Outreach History */}
-          <Section className="fade-up fade-up-5" title="Outreach History" subtitle={history.length > 0 ? `${history.length} outreach tercatat` : "Belum ada outreach"}>
+          <Section className="fade-up fade-up-5" title="Outreach History" subtitle={history.length > 0 ? `${history.length} outreach recorded` : "No outreach yet"}>
             {history.length > 0 && (
               <div style={{ position: "relative", marginBottom: 20 }}>
                 <div style={{ position: "absolute", left: 11, top: 0, bottom: 0, width: 2, background: "var(--border)" }} />
@@ -487,14 +696,14 @@ export default function LeadDetail() {
             )}
 
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" as const }}>Tambah Catatan</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: 1, marginBottom: 8, textTransform: "uppercase" as const }}>Add Note</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={noteInput} onChange={e => setNoteInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addNote()}
-                  placeholder="Catatan tambahan selain outreach di atas"
+                  placeholder="Add a note beyond the outreach above"
                   style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--canvas)", fontSize: 13, color: "var(--text)", outline: "none", fontFamily: "var(--font-body)" }}
                 />
                 <button onClick={addNote} style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--text)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  + Tambah
+                  + Add
                 </button>
               </div>
             </div>
