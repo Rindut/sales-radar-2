@@ -27,6 +27,7 @@ export default function Sidebar({ active, leadCount }: { active: Page; leadCount
 
   const nav: { id: Page; label: string; href: string; badge?: string; icon: JSX.Element }[] = [
     { id: "dashboard", label: "Leads",    href: "/",          badge: resolvedLeadCount === null ? undefined : String(resolvedLeadCount), icon: <TargetIcon /> },
+    { id: "history",   label: "Dashboard", href: "/history",                icon: <DashboardIcon /> },
     { id: "settings",  label: "Settings", href: "/settings",               icon: <SettingsIcon /> },
     { id: "playbook",  label: "Playbook", href: "/playbook",               icon: <PlaybookIcon /> },
   ];
@@ -122,6 +123,9 @@ export default function Sidebar({ active, leadCount }: { active: Page; leadCount
 
 function TargetIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>;
+}
+function DashboardIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 13.5V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2.5 13.5h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><rect x="4.5" y="7" width="2" height="4" rx=".6" fill="currentColor"/><rect x="7.5" y="4.5" width="2" height="6.5" rx=".6" fill="currentColor"/><rect x="10.5" y="6" width="2" height="5" rx=".6" fill="currentColor"/></svg>;
 }
 function PlaybookIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1.5" width="9" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M5 5h4M5 7.5h4M5 10h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11.5 4.5L13.5 8l-2 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>;

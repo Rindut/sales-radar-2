@@ -162,7 +162,7 @@ async def get_lead_detail(
         lead = _record_to_lead(record)
         if _contacts_need_enrichment(lead.contacts):
             icp = await _get_active_icp(session)
-            contacts, contact_warning = await resolve_contact(company_id, icp.target_roles)
+            contacts, contact_warning = await resolve_contact(company_id, icp.target_roles, icp.keywords)
             if contacts:
                 lead.contacts = contacts
                 lead.contact_warning = contact_warning
@@ -179,7 +179,7 @@ async def get_lead_detail(
         raise HTTPException(status_code=404, detail="Lead not found")
 
     icp = await _get_active_icp(session)
-    contacts, contact_warning = await resolve_contact(company_id, icp.target_roles)
+    contacts, contact_warning = await resolve_contact(company_id, icp.target_roles, icp.keywords)
     from services.scoring import _score_company
     score = _score_company(company, icp)
     lead = Lead(
@@ -190,6 +190,34 @@ async def get_lead_detail(
         fetched_at=datetime.utcnow(),
     )
     # Save to DB so outreach generation can find it
+    await _upsert_lead(session, lead)
+    await session.commit()
+    return lead
+
+
+@router.post("/{company_id}/refresh-contacts", response_model=Lead)
+async def refresh_lead_contacts(
+    company_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    record = await session.get(LeadRecord, company_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    icp = await _get_active_icp(session)
+    contacts, contact_warning = await resolve_contact(company_id, icp.target_roles, icp.keywords)
+
+    if not contacts and contact_warning:
+        record.contact_warning = contact_warning
+        await session.commit()
+        lead = _record_to_lead(record)
+        lead.contact_warning = contact_warning
+        return lead
+
+    lead = _record_to_lead(record)
+    lead.contacts = contacts
+    lead.contact_warning = contact_warning
+    lead.fetched_at = datetime.utcnow()
     await _upsert_lead(session, lead)
     await session.commit()
     return lead

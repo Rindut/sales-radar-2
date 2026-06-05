@@ -94,6 +94,10 @@ export interface OutreachEvent {
   created_at: string;
 }
 
+export interface OutreachActivity extends OutreachEvent {
+  company_name?: string;
+}
+
 export interface OutreachEventCreate {
   event_type?: "outreach" | "note";
   channel?: "email" | "linkedin" | "whatsapp" | string;
@@ -126,6 +130,9 @@ export const api = {
   getLeadDetail: (companyId: string) =>
     request<Lead>(`/leads/${companyId}`),
 
+  refreshLeadContacts: (companyId: string) =>
+    request<Lead>(`/leads/${companyId}/refresh-contacts`, { method: "POST" }),
+
   skipLead: (companyId: string) =>
     request<{ status: string }>(`/leads/reject/${companyId}`, { method: "POST" }),
 
@@ -157,6 +164,9 @@ export const api = {
 
   getOutreachHistory: (companyId: string) =>
     request<OutreachEvent[]>(`/outreach/history/${companyId}`),
+
+  getRecentOutreachActivity: (limit = 100) =>
+    request<OutreachActivity[]>(`/outreach/history/recent?limit=${limit}`),
 
   createOutreachEvent: (companyId: string, data: OutreachEventCreate) =>
     request<OutreachEvent>(`/outreach/history/${companyId}`, {

@@ -103,6 +103,8 @@ export default function LeadDetail() {
   const [isSkipped, setIsSkipped] = useState(false);
   const [leadActionLoading, setLeadActionLoading] = useState<"save" | "skip" | null>(null);
   const [leadActionError, setLeadActionError] = useState<string | null>(null);
+  const [contactsRefreshing, setContactsRefreshing] = useState(false);
+  const [contactsRefreshError, setContactsRefreshError] = useState<string | null>(null);
 
   // Email send state
   const [emailSending, setEmailSending] = useState(false);
@@ -259,6 +261,24 @@ export default function LeadDetail() {
       setLeadActionError(e.message);
     } finally {
       setLeadActionLoading(null);
+    }
+  };
+
+  const handleRefreshContacts = async () => {
+    if (!id || contactsRefreshing) return;
+    setContactsRefreshing(true);
+    setContactsRefreshError(null);
+    try {
+      const updatedLead = await api.refreshLeadContacts(id as string);
+      setLead(updatedLead);
+      setSelectedContactIdx(0);
+      setIsSaved(Boolean(updatedLead.is_saved && !updatedLead.is_rejected));
+      setIsSkipped(Boolean(updatedLead.is_rejected));
+      setEmailTo(updatedLead.contacts?.[0]?.email ?? "");
+    } catch (e: any) {
+      setContactsRefreshError(e.message);
+    } finally {
+      setContactsRefreshing(false);
     }
   };
 
@@ -448,7 +468,31 @@ export default function LeadDetail() {
             <Section className="fade-up fade-up-3"
               title={`Contact Person${contacts.length > 1 ? ` (${contacts.length} found)` : ""}`}
               subtitle={contacts.length > 1 ? "Choose the contact to use for outreach" : undefined}
+              badge={
+                <button
+                  onClick={handleRefreshContacts}
+                  disabled={contactsRefreshing}
+                  style={{
+                    marginLeft: 10,
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: contactsRefreshing ? "var(--canvas-2)" : "var(--canvas)",
+                    color: contactsRefreshing ? "var(--text-3)" : "var(--accent-text)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: contactsRefreshing ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {contactsRefreshing ? "Refreshing..." : "Refresh contacts"}
+                </button>
+              }
             >
+              {contactsRefreshError && (
+                <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef4444", background: "#fef2f2", color: "#ef4444", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+                  ⚠ {contactsRefreshError}
+                </div>
+              )}
               {contactWarning && (
                 <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
                   ⚠ {contactWarning}

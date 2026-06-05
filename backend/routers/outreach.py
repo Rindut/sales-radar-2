@@ -111,6 +111,10 @@ class OutreachEventResponse(BaseModel):
     created_at: datetime
 
 
+class OutreachActivityResponse(OutreachEventResponse):
+    company_name: str | None = None
+
+
 def _event_to_response(record: OutreachEventRecord) -> OutreachEventResponse:
     return OutreachEventResponse(
         id=record.id,
@@ -127,6 +131,29 @@ def _event_to_response(record: OutreachEventRecord) -> OutreachEventResponse:
         metadata=record.event_metadata or {},
         created_at=record.created_at,
     )
+
+
+def _event_to_activity_response(record: OutreachEventRecord, company_name: str | None) -> OutreachActivityResponse:
+    base = _event_to_response(record)
+    return OutreachActivityResponse(**base.model_dump(), company_name=company_name)
+
+
+@router.get("/history/recent", response_model=list[OutreachActivityResponse])
+async def list_recent_outreach_activity(
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+):
+    safe_limit = max(1, min(limit, 250))
+    result = await session.execute(
+        select(OutreachEventRecord, LeadRecord.name)
+        .outerjoin(LeadRecord, LeadRecord.id == OutreachEventRecord.company_id)
+        .order_by(OutreachEventRecord.created_at.desc())
+        .limit(safe_limit)
+    )
+    return [
+        _event_to_activity_response(event, company_name)
+        for event, company_name in result.all()
+    ]
 
 
 @router.get("/history/{company_id}", response_model=list[OutreachEventResponse])
