@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, String, Float, Integer, Text, DateTime, JSON, Boolean
+from sqlalchemy import Column, String, Float, Integer, BigInteger, Text, DateTime, JSON, Boolean
 from datetime import datetime
 from config import DATABASE_URL
 
@@ -43,7 +43,7 @@ class LeadRecord(Base):
     location = Column(String, nullable=True)
     keywords = Column(JSON, default=list)
     founded_year = Column(Integer, nullable=True)
-    revenue = Column(Integer, nullable=True)
+    revenue = Column(BigInteger, nullable=True)
     score = Column(Float)
     score_breakdown = Column(JSON)
     reasoning = Column(JSON)
@@ -89,6 +89,9 @@ class OutreachEventRecord(Base):
 
 async def _migrate(conn):
     """Add contacts column if it doesn't exist (safe to run on every startup)."""
+    if conn.dialect.name != "sqlite":
+        return
+
     try:
         await conn.execute(
             __import__("sqlalchemy").text(
