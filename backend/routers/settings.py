@@ -6,8 +6,24 @@ from datetime import datetime
 from db import get_session, ICPRecord
 from models.schemas import ICPConfig
 from config import DEFAULT_ICP
+from services.sherlock_enrich import sherlock_available, SITE_WHITELIST
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("/sources/sherlock")
+async def get_sherlock_source_status():
+    """Live status for the Sherlock enrichment source shown on the Settings page.
+    'active' reflects whether the Sherlock binary/module is actually runnable."""
+    available = sherlock_available()
+    return {
+        "label": "Sherlock",
+        "desc": "Enrichment: public social profiles per contact",
+        "active": available,
+        "status": "Active" if available else "Not installed",
+        "role": "enrichment",
+        "site_count": len(SITE_WHITELIST),
+    }
 
 
 @router.get("/icp", response_model=ICPConfig)

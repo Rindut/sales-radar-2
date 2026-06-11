@@ -87,6 +87,16 @@ class OutreachEventRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class SherlockCacheRecord(Base):
+    """Cache of Sherlock results keyed by username, so a handle is never
+    re-scanned within the TTL window. results = list of {site, url}."""
+    __tablename__ = "sherlock_cache"
+
+    username = Column(String, primary_key=True)
+    results = Column(JSON, default=list)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
 async def _migrate(conn):
     """Add contacts column if it doesn't exist (safe to run on every startup)."""
     if conn.dialect.name != "sqlite":

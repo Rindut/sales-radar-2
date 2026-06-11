@@ -11,3 +11,6 @@ greenlet==3.2.4
 aiosmtplib==3.0.1
 certifi>=2024.1.1
 # Note: email sending now uses Resend API (httpx) instead of SMTP
+# Sherlock social enrichment (services/sherlock_enrich.py). Invoked as a
+# subprocess against a curated 12-site whitelist, on-demand per contact only.
+sherlock-project==0.16.0

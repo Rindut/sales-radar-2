@@ -1,5 +1,13 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8005";
 
+export interface SocialProfile {
+  site: string;
+  url: string;
+  username: string;
+  source: "email_localpart" | "linkedin_slug" | "name_permutation" | string;
+  confidence: "high" | "low" | string;
+}
+
 export interface Contact {
   name?: string;
   role?: string;
@@ -7,6 +15,8 @@ export interface Contact {
   email?: string;
   phone?: string;
   enrichment_warning?: string;
+  social_profiles?: SocialProfile[];
+  socials_enriched_at?: string;
 }
 
 export interface LeadScore {
@@ -51,6 +61,15 @@ export interface OutreachDraft {
   subject?: string;
   message: string;
   tips: string[];
+}
+
+export interface SourceStatus {
+  label: string;
+  desc: string;
+  active: boolean;
+  status: string;
+  role?: string;
+  site_count?: number;
 }
 
 export interface ICPConfig {
@@ -133,6 +152,12 @@ export const api = {
   refreshLeadContacts: (companyId: string) =>
     request<Lead>(`/leads/${companyId}/refresh-contacts`, { method: "POST" }),
 
+  enrichSocials: (companyId: string, force = false) =>
+    request<Lead>(`/leads/${companyId}/enrich-socials?force=${force}`, { method: "POST" }),
+
+  clearSocials: (companyId: string) =>
+    request<Lead>(`/leads/${companyId}/clear-socials`, { method: "POST" }),
+
   skipLead: (companyId: string) =>
     request<{ status: string }>(`/leads/reject/${companyId}`, { method: "POST" }),
 
@@ -178,6 +203,9 @@ export const api = {
     request<{ status: string }>(`/outreach/history/${companyId}/${eventId}`, {
       method: "DELETE",
     }),
+
+  getSherlockSourceStatus: () =>
+    request<SourceStatus>("/settings/sources/sherlock"),
 
   getICP: () => request<ICPConfig>("/settings/icp"),
 

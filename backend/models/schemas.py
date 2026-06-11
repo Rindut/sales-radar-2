@@ -3,6 +3,14 @@ from typing import Optional, List
 from datetime import datetime
 
 
+class SocialProfile(BaseModel):
+    site: str                              # "GitHub", "Medium", ...
+    url: str                               # public profile URL Sherlock confirmed
+    username: str                          # handle that produced the hit
+    source: str                            # "email_localpart" | "linkedin_slug" | "name_permutation"
+    confidence: str                        # "high" | "low"
+
+
 class Contact(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
@@ -10,6 +18,8 @@ class Contact(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     enrichment_warning: Optional[str] = None
+    social_profiles: List[SocialProfile] = Field(default_factory=list)
+    socials_enriched_at: Optional[datetime] = None
 
 
 class LeadScore(BaseModel):

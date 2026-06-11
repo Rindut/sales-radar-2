@@ -1,15 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
-from datetime import datetime
-from typing import List
+from sqlalchemy import select, desc, delete
+from datetime import datetime, timedelta
+from typing import List, Optional
 
-from db import get_session, LeadRecord, ICPRecord
+from db import get_session, LeadRecord, ICPRecord, SherlockCacheRecord
 from models.schemas import Lead, Company, LeadScore, Contact, DashboardResponse, ICPConfig
 from services.apollo import discover_companies, resolve_contact, get_company_detail
+from services.sherlock_enrich import enrich_contact_socials, sherlock_available
 from services.icp_filter import apply_icp_filter
 from services.scoring import score_companies
 from config import DEFAULT_ICP
+
+# Sherlock cache TTL: a username's public footprint changes slowly, so a month
+# is fine and keeps enrichment cheap.
+SHERLOCK_CACHE_TTL = timedelta(days=30)
+# Skip re-running enrichment on a contact still inside this freshness window.
+SOCIALS_FRESH_TTL = timedelta(days=30)
 
 try:
     from services.dummy_data import get_dummy_companies, get_dummy_contact
@@ -223,6 +230,115 @@ async def refresh_lead_contacts(
     return lead
 
 
+def _make_cache_callables(session: AsyncSession):
+    """Build DB-backed cache get/set bound to this session for Sherlock."""
+
+    async def cache_get(username: str) -> Optional[list]:
+        record = await session.get(SherlockCacheRecord, username)
+        if not record:
+            return None
+        if record.fetched_at and datetime.utcnow() - record.fetched_at > SHERLOCK_CACHE_TTL:
+            return None  # stale -> force a refresh
+        return record.results or []
+
+    async def cache_set(username: str, results: list) -> None:
+        record = await session.get(SherlockCacheRecord, username)
+        if record:
+            record.results = results
+            record.fetched_at = datetime.utcnow()
+        else:
+            session.add(SherlockCacheRecord(
+                username=username, results=results, fetched_at=datetime.utcnow(),
+            ))
+
+    return cache_get, cache_set
+
+
+@router.post("/{company_id}/enrich-socials", response_model=Lead)
+async def enrich_lead_socials(
+    company_id: str,
+    force: bool = False,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Enrichment layer (Sherlock). For each contact, derive candidate usernames
+    from Apollo data and confirm public social profiles against the curated
+    site whitelist. On-demand, manual trigger only.
+
+    Idempotent: contacts enriched within SOCIALS_FRESH_TTL are skipped unless
+    force=true.
+    """
+    if not sherlock_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Sherlock belum terinstall. Jalankan: pip install sherlock-project==0.16.0 di venv backend.",
+        )
+
+    record = await session.get(LeadRecord, company_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead = _record_to_lead(record)
+    if not lead.contacts:
+        return lead
+
+    cache_get, cache_set = _make_cache_callables(session)
+    now = datetime.utcnow()
+    changed = False
+
+    for contact in lead.contacts:
+        if not force and contact.socials_enriched_at:
+            if now - contact.socials_enriched_at < SOCIALS_FRESH_TTL:
+                continue  # still fresh
+        contact.social_profiles = await enrich_contact_socials(
+            contact, cache_get=cache_get, cache_set=cache_set,
+        )
+        contact.socials_enriched_at = now
+        changed = True
+
+    if changed:
+        lead.fetched_at = lead.fetched_at or now
+        await _upsert_lead(session, lead)
+        await session.commit()
+
+    return lead
+
+
+@router.post("/{company_id}/clear-socials", response_model=Lead)
+async def clear_lead_socials(
+    company_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    PDP / right-to-erasure. Remove enriched social profiles for all contacts of
+    this lead and purge the matching usernames from the Sherlock cache.
+    """
+    record = await session.get(LeadRecord, company_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead = _record_to_lead(record)
+    usernames = {
+        sp.username
+        for contact in lead.contacts
+        for sp in contact.social_profiles
+        if sp.username
+    }
+
+    for contact in lead.contacts:
+        contact.social_profiles = []
+        contact.socials_enriched_at = None
+
+    if usernames:
+        await session.execute(
+            delete(SherlockCacheRecord).where(SherlockCacheRecord.username.in_(usernames))
+        )
+
+    await _upsert_lead(session, lead)
+    await session.commit()
+    return lead
+
+
 async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> List[Lead]:
     if DUMMY_MODE and get_dummy_companies:
         raw = [c for c in get_dummy_companies() if c.id not in exclude_ids]
@@ -268,7 +384,9 @@ async def _fetch_fresh_leads(icp: ICPConfig, exclude_ids: set, limit: int) -> Li
 
 
 async def _upsert_lead(session: AsyncSession, lead: Lead):
-    contacts_json = [c.dict() for c in lead.contacts]
+    # mode="json" serializes datetimes (e.g. socials_enriched_at) to ISO strings
+    # so they survive the JSON column round-trip.
+    contacts_json = [c.model_dump(mode="json") for c in lead.contacts]
     existing = await session.get(LeadRecord, lead.company.id)
     if existing:
         existing.score = lead.score.total

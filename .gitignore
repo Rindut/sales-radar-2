@@ -49,3 +49,6 @@ frontend/tsconfig.tsbuildinfo
 # Editor
 .vscode/
 .idea/
+
+# Local data backups / scratch outputs (never commit prod data)
+outputs/

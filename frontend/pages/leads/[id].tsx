@@ -105,6 +105,9 @@ export default function LeadDetail() {
   const [leadActionError, setLeadActionError] = useState<string | null>(null);
   const [contactsRefreshing, setContactsRefreshing] = useState(false);
   const [contactsRefreshError, setContactsRefreshError] = useState<string | null>(null);
+  const [socialsEnriching, setSocialsEnriching] = useState(false);
+  const [socialsError, setSocialsError] = useState<string | null>(null);
+  const [socialsResult, setSocialsResult] = useState<string | null>(null);
 
   // Email send state
   const [emailSending, setEmailSending] = useState(false);
@@ -279,6 +282,44 @@ export default function LeadDetail() {
       setContactsRefreshError(e.message);
     } finally {
       setContactsRefreshing(false);
+    }
+  };
+
+  const handleEnrichSocials = async () => {
+    if (!id || socialsEnriching) return;
+    setSocialsEnriching(true);
+    setSocialsError(null);
+    setSocialsResult(null);
+    try {
+      const updatedLead = await api.enrichSocials(id as string);
+      setLead(updatedLead);
+      const total = (updatedLead.contacts ?? []).reduce(
+        (n, c) => n + (c.social_profiles?.length ?? 0), 0
+      );
+      setSocialsResult(
+        total > 0
+          ? `Done. ${total} public profile${total > 1 ? "s" : ""} found across contacts.`
+          : "Done. No public profiles found for these contacts on the checked sites."
+      );
+    } catch (e: any) {
+      setSocialsError(e.message);
+    } finally {
+      setSocialsEnriching(false);
+    }
+  };
+
+  const handleClearSocials = async () => {
+    if (!id || socialsEnriching) return;
+    setSocialsEnriching(true);
+    setSocialsError(null);
+    setSocialsResult(null);
+    try {
+      const updatedLead = await api.clearSocials(id as string);
+      setLead(updatedLead);
+    } catch (e: any) {
+      setSocialsError(e.message);
+    } finally {
+      setSocialsEnriching(false);
     }
   };
 
@@ -469,28 +510,75 @@ export default function LeadDetail() {
               title={`Contact Person${contacts.length > 1 ? ` (${contacts.length} found)` : ""}`}
               subtitle={contacts.length > 1 ? "Choose the contact to use for outreach" : undefined}
               badge={
-                <button
-                  onClick={handleRefreshContacts}
-                  disabled={contactsRefreshing}
-                  style={{
-                    marginLeft: 10,
-                    padding: "5px 10px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: contactsRefreshing ? "var(--canvas-2)" : "var(--canvas)",
-                    color: contactsRefreshing ? "var(--text-3)" : "var(--accent-text)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: contactsRefreshing ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {contactsRefreshing ? "Refreshing..." : "Refresh contacts"}
-                </button>
+                <span style={{ display: "inline-flex", gap: 8, marginLeft: 10 }}>
+                  <button
+                    onClick={handleRefreshContacts}
+                    disabled={contactsRefreshing}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: contactsRefreshing ? "var(--canvas-2)" : "var(--canvas)",
+                      color: contactsRefreshing ? "var(--text-3)" : "var(--accent-text)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: contactsRefreshing ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {contactsRefreshing ? "Refreshing..." : "Refresh contacts"}
+                  </button>
+                  <button
+                    onClick={handleEnrichSocials}
+                    disabled={socialsEnriching}
+                    title="Check public social profiles (10-25s). Derived from email/name, results may be unverified."
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: socialsEnriching ? "var(--canvas-2)" : "var(--canvas)",
+                      color: socialsEnriching ? "var(--text-3)" : "var(--accent-text)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: socialsEnriching ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {socialsEnriching ? "Checking profiles..." : "Enrich socials"}
+                  </button>
+                  {contacts.some(c => (c.social_profiles?.length ?? 0) > 0) && (
+                    <button
+                      onClick={handleClearSocials}
+                      disabled={socialsEnriching}
+                      title="Remove enriched social profiles (PDP / right to erasure)"
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                        background: "var(--canvas)",
+                        color: "var(--text-3)",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: socialsEnriching ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Clear socials
+                    </button>
+                  )}
+                </span>
               }
             >
               {contactsRefreshError && (
                 <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef4444", background: "#fef2f2", color: "#ef4444", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
                   ⚠ {contactsRefreshError}
+                </div>
+              )}
+              {socialsError && (
+                <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ef4444", background: "#fef2f2", color: "#ef4444", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+                  ⚠ {socialsError}
+                </div>
+              )}
+              {socialsResult && !socialsError && (
+                <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--canvas-2)", color: "var(--text-2)", fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+                  {socialsResult}
                 </div>
               )}
               {contactWarning && (
@@ -535,6 +623,43 @@ export default function LeadDetail() {
                             <DataBadge label="Email" available={!!c.email} value={c.email} />
                             <DataBadge label="Phone" available={!!c.phone} value={c.phone} />
                           </div>
+                          {/* Sherlock social profiles */}
+                          {(c.social_profiles?.length ?? 0) > 0 && (
+                            <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", letterSpacing: 0.5, textTransform: "uppercase" as const, marginBottom: 4 }}>
+                                Public profiles
+                              </div>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                {c.social_profiles!.map((sp, i) => (
+                                  <a
+                                    key={i}
+                                    href={sp.url}
+                                    target="_blank"
+                                    rel="noopener"
+                                    title={
+                                      sp.confidence === "high"
+                                        ? `${sp.site} · matched from email handle "${sp.username}"`
+                                        : `${sp.site} · unverified, derived from ${sp.source.replace("_", " ")} ("${sp.username}")`
+                                    }
+                                    style={{
+                                      display: "inline-flex", alignItems: "center", gap: 4,
+                                      fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5,
+                                      textDecoration: "none",
+                                      background: sp.confidence === "high" ? "#dbeafe" : "transparent",
+                                      color: sp.confidence === "high" ? "#1d4ed8" : "var(--text-2)",
+                                      border: `1px solid ${sp.confidence === "high" ? "#bfdbfe" : "var(--border)"}`,
+                                      borderStyle: sp.confidence === "high" ? "solid" : "dashed",
+                                    }}
+                                  >
+                                    {sp.site}
+                                    {sp.confidence !== "high" && (
+                                      <span style={{ fontSize: 9, opacity: 0.7 }}>· unverified</span>
+                                    )}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>

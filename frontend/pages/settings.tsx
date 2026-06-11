@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { api, ICPConfig } from "../lib/api";
+import { api, ICPConfig, SourceStatus } from "../lib/api";
 import Sidebar from "../components/Sidebar";
 
 const APOLLO_INDUSTRIES = [
@@ -86,12 +86,14 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sherlock, setSherlock] = useState<SourceStatus | null>(null);
 
   useEffect(() => {
     api.getICP()
       .then(setConfig)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+    api.getSherlockSourceStatus().then(setSherlock).catch(() => {});
   }, []);
 
   const handleSave = async () => {
@@ -232,19 +234,38 @@ export default function Settings() {
           {/* Data Sources */}
           <Section className="fade-up fade-up-2" title="Data Sources" subtitle="Choose where leads are collected from">
             {[
-              { label: "Apollo.io", desc: "Database company & contact global", status: "Connected", active: true },
-              { label: "Website Crawl", desc: "Crawl career page & website update", status: "Active", active: true },
-              { label: "LinkedIn", desc: "Signal hiring & activity LinkedIn", status: "Not connected", active: false },
+              { label: "Apollo.io", desc: "Database company & contact global", status: "Connected", active: true, live: false },
+              { label: "Website Crawl", desc: "Crawl career page & website update", status: "Active", active: true, live: false },
+              { label: "LinkedIn", desc: "Signal hiring & activity LinkedIn", status: "Not connected", active: false, live: false },
+              {
+                label: sherlock?.label ?? "Sherlock",
+                desc: sherlock
+                  ? `${sherlock.desc} · ${sherlock.site_count ?? 0} sites`
+                  : "Enrichment: public social profiles per contact",
+                status: sherlock ? sherlock.status : "Checking...",
+                active: sherlock?.active ?? false,
+                live: true,
+              },
             ].map(src => (
               <div key={src.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{src.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                    {src.label}
+                    {src.live && (
+                      <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" as const, padding: "2px 6px", borderRadius: 4, background: "var(--accent-dim)", color: "var(--accent-text)", verticalAlign: "middle" }}>
+                        Live
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{src.desc}</div>
                   <div style={{ fontSize: 11, marginTop: 4, color: src.active ? "#16a34a" : "var(--text-3)", fontWeight: 600 }}>{src.status}</div>
                 </div>
                 <Toggle value={src.active} onChange={() => {}} />
               </div>
             ))}
+            <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 12, lineHeight: 1.5 }}>
+              Sherlock status reflects whether the tool is installed on the backend. It is an enrichment source (per-contact, manual), not a lead discovery source.
+            </p>
           </Section>
 
           {/* System Status */}
