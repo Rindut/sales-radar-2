@@ -287,7 +287,7 @@ export default function Dashboard() {
 
               {activeTab === "active" && (
                 activeLeads.length > 0 ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                     {activeLeads.map((lead) => (
                       <LeadCard
                         key={lead.company.id}
@@ -307,7 +307,7 @@ export default function Dashboard() {
 
               {activeTab === "saved" && (
                 savedLeads.length > 0 ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                     {savedLeads.map((lead) => (
                       <LeadCard
                         key={lead.company.id}
